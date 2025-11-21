@@ -8,8 +8,8 @@ interface NavigationProps {
 export function Navigation({ activeTab, onTabChange }: NavigationProps) {
   const tabs = [
     { id: 'explore', label: '둘러보기' },
+    { id: 'chat', label: '채팅' },
     { id: 'board', label: '게시판' },
-    { id: 'home', label: '홈' },
     { id: 'records', label: '기록' },
     { id: 'profile', label: '프로필' },
   ];

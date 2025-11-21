@@ -11,6 +11,8 @@ import { PostDetailPage } from "./components/PostDetailPage";
 import { LikedMatesPage } from "./components/LikedMatesPage";
 import { AuthPage } from "./components/AuthPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { ChatPage } from "./components/ChatPage";
+import { ChatRoomPage } from "./components/ChatRoomPage";
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
@@ -21,6 +23,7 @@ export default function App() {
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
   const [showLikedMates, setShowLikedMates] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [selectedChatRoomId, setSelectedChatRoomId] = useState<number | null>(null);
 
   // 앱 시작 시 인증 상태 확인
   useEffect(() => {
@@ -76,6 +79,7 @@ export default function App() {
     setSelectedPostId(null);
     setShowLikedMates(false);
     setShowSettings(false);
+    setSelectedChatRoomId(null);
   };
 
   const handlePostClick = (postId: number) => {
@@ -102,6 +106,14 @@ export default function App() {
     setShowSettings(false);
   };
 
+  const handleChatRoomClick = (chatRoomId: number) => {
+    setSelectedChatRoomId(chatRoomId);
+  };
+
+  const handleBackFromChatRoom = () => {
+    setSelectedChatRoomId(null);
+  };
+
   const renderPage = () => {
     // 좋아요한 메이트 전체보기 페이지
     if (activeTab === 'profile' && showLikedMates) {
@@ -123,9 +135,16 @@ export default function App() {
       return <PostDetailPage postId={selectedPostId} onBack={handleBackFromPost} />;
     }
 
+    // 채팅방이 선택된 경우
+    if (activeTab === 'chat' && selectedChatRoomId !== null) {
+      return <ChatRoomPage chatRoomId={selectedChatRoomId} onBack={handleBackFromChatRoom} />;
+    }
+
     switch (activeTab) {
       case 'explore':
         return <ExplorePage />;
+      case 'chat':
+        return <ChatPage onChatRoomClick={handleChatRoomClick} />;
       case 'board':
         return <BoardPage onPostClick={handlePostClick} />;
       case 'home':
