@@ -25,3 +25,14 @@ vite.config.ts.timestamp*
 
 # Mac system files
 .DS_Store
+
+# Git flow installer files
+gitflow/
+gitflow-installer.sh
+gitflow-
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Temp files
+g
