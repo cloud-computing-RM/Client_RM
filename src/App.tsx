@@ -13,12 +13,16 @@ import { AuthPage } from "./components/AuthPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { ChatPage } from "./components/ChatPage";
 import { ChatRoomPage } from "./components/ChatRoomPage";
+import { getMe } from "./services/authService";
+import { tokenStorage } from "./services/apiClient";
+import type { User } from "./types";
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
   const [showLikedMates, setShowLikedMates] = useState(false);
@@ -27,14 +31,32 @@ export default function App() {
 
   // 앱 시작 시 인증 상태 확인
   useEffect(() => {
-    const authStatus = localStorage.getItem('runmate_auth');
-    const savedUser = localStorage.getItem('runmate_user');
-    
-    if (authStatus === 'true' && savedUser) {
-      setIsAuthenticated(true);
-      setUser(JSON.parse(savedUser));
-      setShowLanding(false);
-    }
+    const checkAuth = async () => {
+      const token = tokenStorage.get();
+      const authStatus = localStorage.getItem('runmate_auth');
+
+      if (token && authStatus === 'true') {
+        try {
+          // 토큰이 있으면 서버에서 사용자 정보 확인
+          const userData = await getMe();
+          setIsAuthenticated(true);
+          setUser(userData);
+          localStorage.setItem('runmate_user', JSON.stringify(userData));
+          setShowLanding(false);
+        } catch (error) {
+          // 토큰이 유효하지 않으면 로그아웃 처리
+          tokenStorage.remove();
+          localStorage.removeItem('runmate_auth');
+          localStorage.removeItem('runmate_user');
+          setIsAuthenticated(false);
+          setUser(null);
+        }
+      }
+
+      setIsLoading(false);
+    };
+
+    checkAuth();
   }, []);
 
   const handleNavigateToAuth = () => {
@@ -47,7 +69,7 @@ export default function App() {
     setShowLanding(true);
   };
 
-  const handleLogin = (userData: any) => {
+  const handleLogin = (userData: User) => {
     setIsAuthenticated(true);
     setUser(userData);
     setShowAuth(false);
@@ -56,13 +78,27 @@ export default function App() {
 
   const handleLogout = () => {
     if (window.confirm('로그아웃 하시겠습니까?')) {
+      tokenStorage.remove();
       localStorage.removeItem('runmate_auth');
+      localStorage.removeItem('runmate_user');
       setIsAuthenticated(false);
       setUser(null);
       setActiveTab('home');
       setShowLanding(true);
     }
   };
+
+  // 로딩 중일 때
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+          <p className="mt-4 text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   // 랜딩 페이지 표시
   if (showLanding && !isAuthenticated) {
