@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Badge } from "./ui/badge";
-import { Heart, MapPin, Clock, Users, X, RotateCcw, Zap } from "lucide-react";
+import { Heart, MapPin, Clock, Users, X, RotateCcw, Zap, Navigation } from "lucide-react";
 import { Button } from "./ui/button";
+import { getNearbyUsers } from "../services/userService";
+import type { NearbyUser } from "../types";
 
 export function ExplorePage() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -11,6 +13,8 @@ export function ExplorePage() {
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const [nearbyUsers, setNearbyUsers] = useState<NearbyUser[]>([]);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
   const runningProfiles = [
     {
@@ -114,6 +118,38 @@ export function ExplorePage() {
     },
   ];
 
+  // GPS 위치 가져오고 주변 러너 검색
+  const loadNearbyUsers = async () => {
+    setIsLoadingLocation(true);
+
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const users = await getNearbyUsers(latitude, longitude, 5); // 5km 반경
+            setNearbyUsers(users);
+            setCurrentIndex(0); // 검색 후 첫 번째 프로필부터 시작
+          } catch (error) {
+            console.error('Failed to fetch nearby users:', error);
+            alert('주변 러너를 찾을 수 없습니다. 다시 시도해주세요.');
+          } finally {
+            setIsLoadingLocation(false);
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          alert('위치 정보를 가져올 수 없습니다. 브라우저 설정에서 위치 권한을 확인해주세요.');
+          setIsLoadingLocation(false);
+        }
+      );
+    } else {
+      console.error('Geolocation is not supported');
+      alert('이 브라우저는 위치 기능을 지원하지 않습니다.');
+      setIsLoadingLocation(false);
+    }
+  };
+
   // localStorage에서 좋아요한 프로필 불러오기
   useEffect(() => {
     const savedLikes = localStorage.getItem('runmate_liked_profiles');
@@ -134,7 +170,24 @@ export function ExplorePage() {
     }
   }, []);
 
-  const currentProfile = runningProfiles[currentIndex];
+  // nearbyUsers를 목업 데이터와 같은 형식으로 변환
+  const transformedNearbyUsers = nearbyUsers.map(user => ({
+    id: user.user_id,
+    name: user.name,
+    age: user.age,
+    location: user.location,
+    pace: user.preferred_pace_min && user.preferred_pace_max
+      ? `${Math.floor((user.preferred_pace_min + user.preferred_pace_max) / 2 / 60)}:${String(Math.floor((user.preferred_pace_min + user.preferred_pace_max) / 2 % 60)).padStart(2, '0')}/km`
+      : "5:30/km",
+    distance: user.preferred_frequency || "주 3회, 5-10km",
+    bio: user.bio || "함께 달릴 러닝 메이트를 찾고 있어요!",
+    tags: user.tags?.map(tag => tag.tag_name) || [],
+    image: user.profile_image || '',
+  }));
+
+  // nearbyUsers가 있으면 사용하고, 없으면 목업 데이터 사용
+  const displayProfiles = transformedNearbyUsers.length > 0 ? transformedNearbyUsers : runningProfiles;
+  const currentProfile = displayProfiles[currentIndex];
 
   const handleLike = () => {
     if (!currentProfile) return;
@@ -233,13 +286,14 @@ export function ExplorePage() {
         localStorage.removeItem('runmate_liked_profiles_data');
         setLikedProfiles([]);
         setCurrentIndex(0);
+        setNearbyUsers([]); // GPS 검색 결과도 초기화
       } catch (error) {
         console.error('Error resetting profiles:', error);
       }
     }
   };
 
-  if (currentIndex >= runningProfiles.length) {
+  if (currentIndex >= displayProfiles.length) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="max-w-md mx-auto text-center p-8">
@@ -247,14 +301,30 @@ export function ExplorePage() {
             <Heart size={40} className="text-gray-400" />
           </div>
           <h2 className="text-3xl mb-3">모든 메이트를 확인했어요!</h2>
-          <p className="text-gray-600 mb-8">새로운 러닝 메이트가 곧 추가될 예정입니다.</p>
-          <Button 
-            onClick={handleReset}
-            className="bg-black hover:bg-gray-800 text-white"
-          >
-            <RotateCcw size={18} className="mr-2" />
-            처음부터 다시 보기
-          </Button>
+          <p className="text-gray-600 mb-8">
+            {nearbyUsers.length > 0
+              ? 'GPS 검색으로 더 많은 러너를 찾아보세요!'
+              : '새로운 러닝 메이트가 곧 추가될 예정입니다.'}
+          </p>
+          <div className="flex gap-3 justify-center">
+            {nearbyUsers.length === 0 && (
+              <Button
+                onClick={loadNearbyUsers}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={isLoadingLocation}
+              >
+                <Navigation size={18} className="mr-2" />
+                GPS 주변 검색
+              </Button>
+            )}
+            <Button
+              onClick={handleReset}
+              variant="outline"
+            >
+              <RotateCcw size={18} className="mr-2" />
+              처음부터 다시 보기
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -270,16 +340,40 @@ export function ExplorePage() {
         <div className="flex items-center justify-between mb-12">
           <div>
             <h1 className="text-4xl mb-2">둘러보기</h1>
-            <p className="text-gray-600">함께 뛸 러닝 메이트를 찾아보세요</p>
+            <p className="text-gray-600">
+              {nearbyUsers.length > 0
+                ? `주변 러너 ${nearbyUsers.length}명 발견`
+                : '함께 뛸 러닝 메이트를 찾아보세요'}
+            </p>
           </div>
-          <Button
-            onClick={handleReset}
-            variant="ghost"
-            className="text-gray-600 hover:text-gray-900 hover:bg-white"
-          >
-            <RotateCcw size={18} className="mr-2" />
-            초기화
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={loadNearbyUsers}
+              variant="outline"
+              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              disabled={isLoadingLocation}
+            >
+              {isLoadingLocation ? (
+                <>
+                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                  검색 중...
+                </>
+              ) : (
+                <>
+                  <Navigation size={18} className="mr-2" />
+                  GPS 주변 검색
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={handleReset}
+              variant="ghost"
+              className="text-gray-600 hover:text-gray-900 hover:bg-white"
+            >
+              <RotateCcw size={18} className="mr-2" />
+              초기화
+            </Button>
+          </div>
         </div>
 
         {/* Main Content */}
@@ -288,8 +382,8 @@ export function ExplorePage() {
           <div className="relative" style={{ height: '600px' }}>
             <div className="relative w-full h-full max-w-lg mx-auto">
               {/* Next Card Preview (더 뒤에) */}
-              {currentIndex + 2 < runningProfiles.length && (
-                <div 
+              {currentIndex + 2 < displayProfiles.length && (
+                <div
                   className="absolute inset-0 bg-white rounded-3xl shadow-sm border border-gray-100"
                   style={{
                     transform: 'scale(0.90) translateY(20px)',
@@ -300,8 +394,8 @@ export function ExplorePage() {
               )}
 
               {/* Next Card Preview */}
-              {currentIndex + 1 < runningProfiles.length && (
-                <div 
+              {currentIndex + 1 < displayProfiles.length && (
+                <div
                   className="absolute inset-0 bg-white rounded-3xl shadow-md border border-gray-100"
                   style={{
                     transform: 'scale(0.95) translateY(10px)',
@@ -310,8 +404,8 @@ export function ExplorePage() {
                   }}
                 >
                   <ImageWithFallback
-                    src={runningProfiles[currentIndex + 1].image}
-                    alt={runningProfiles[currentIndex + 1].name}
+                    src={displayProfiles[currentIndex + 1].image}
+                    alt={displayProfiles[currentIndex + 1].name}
                     className="w-full h-2/3 object-cover rounded-t-3xl"
                   />
                 </div>
@@ -456,12 +550,12 @@ export function ExplorePage() {
             {/* Progress */}
             <div className="text-center">
               <p className="text-sm text-gray-500">
-                {currentIndex + 1} / {runningProfiles.length}
+                {currentIndex + 1} / {displayProfiles.length}
               </p>
               <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
-                <div 
+                <div
                   className="bg-black h-1.5 rounded-full transition-all duration-300"
-                  style={{ width: `${((currentIndex + 1) / runningProfiles.length) * 100}%` }}
+                  style={{ width: `${((currentIndex + 1) / displayProfiles.length) * 100}%` }}
                 />
               </div>
             </div>

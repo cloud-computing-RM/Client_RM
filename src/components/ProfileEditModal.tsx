@@ -11,23 +11,35 @@ import { ProfileImageUpload } from "./profile/ProfileImageUpload";
 import { BasicInfoForm } from "./profile/BasicInfoForm";
 import { RunningPreferences } from "./profile/RunningPreferences";
 import { TagManager } from "./profile/TagManager";
+import { updateProfile, updatePreferences } from "../services/userService";
+import type { User } from "../types";
 
 interface ProfileEditModalProps {
-  user: any;
+  user: User;
   onClose: () => void;
-  onSave: (updatedUser: any) => void;
+  onSave: (updatedUser: User) => void;
 }
 
 export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProps) {
   const [formData, setFormData] = useState({
     name: user.name,
-    age: user.age,
+    age: user.age || 0,
     location: user.location,
-    bio: user.bio,
-    preferences: { ...user.preferences },
-    tags: [...user.tags],
-    profileImage: user.profileImage,
+    bio: user.bio || '',
+    preferences: {
+      preferred_time: user.preferred_time || '',
+      preferred_frequency: user.preferred_frequency || '',
+      preferred_pace_min: user.preferred_pace_min,
+      preferred_pace_max: user.preferred_pace_max,
+      preferred_distance_min: user.preferred_distance_min,
+      preferred_distance_max: user.preferred_distance_max,
+    },
+    tags: user.tags || [],
+    profileImage: user.profile_image || '',
   });
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData((prev) => ({
@@ -60,12 +72,42 @@ export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProp
     }));
   };
 
-  const handleSave = () => {
-    onSave({
-      ...user,
-      ...formData,
-    });
-    onClose();
+  const handleSave = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // 1. 기본 프로필 정보 업데이트
+      const updatedUser = await updateProfile({
+        name: formData.name,
+        age: formData.age,
+        location: formData.location,
+        bio: formData.bio,
+      });
+
+      // 2. 러닝 선호도 업데이트
+      let finalUser = updatedUser;
+      if (
+        formData.preferences.preferred_time ||
+        formData.preferences.preferred_frequency ||
+        formData.preferences.preferred_pace_min ||
+        formData.preferences.preferred_pace_max ||
+        formData.preferences.preferred_distance_min ||
+        formData.preferences.preferred_distance_max
+      ) {
+        finalUser = await updatePreferences(formData.preferences);
+      }
+
+      // 로컬 스토리지 업데이트
+      localStorage.setItem('runmate_user', JSON.stringify(finalUser));
+
+      onSave(finalUser);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || '프로필 저장에 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -75,6 +117,12 @@ export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProp
           <DialogTitle>프로필 편집</DialogTitle>
           <DialogDescription>프로필 정보를 수정하세요.</DialogDescription>
         </DialogHeader>
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
 
         <div className="space-y-4">
           <ProfileImageUpload
@@ -101,14 +149,15 @@ export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProp
           />
 
           <div className="flex justify-end space-x-2 pt-4">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={isLoading}>
               취소
             </Button>
             <Button
               onClick={handleSave}
               className="bg-[#1e3a8a] hover:bg-[#1e40af]"
+              disabled={isLoading}
             >
-              저장
+              {isLoading ? "저장 중..." : "저장"}
             </Button>
           </div>
         </div>

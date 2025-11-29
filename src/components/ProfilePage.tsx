@@ -4,6 +4,8 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { ProfileEditModal } from "./ProfileEditModal";
 import { Edit, MapPin, Calendar, Heart, Target, Zap, TrendingUp, Award, Settings } from "lucide-react";
+import { getMe } from "../services/authService";
+import type { User } from "../types";
 
 interface ProfilePageProps {
   onNavigateToLikedMates?: () => void;
@@ -13,27 +15,30 @@ interface ProfilePageProps {
 export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: ProfilePageProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [likedProfiles, setLikedProfiles] = useState<any[]>([]);
-  const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('runmate_user');
-    if (savedUser) {
-      return JSON.parse(savedUser);
-    }
-    return {
-      name: "김러너",
-      age: 28,
-      location: "서울 강남구",
-      joinDate: "2024년 1월",
-      bio: "건강한 라이프스타일을 추구하는 러닝 애호가입니다. 함께 뛸 메이트들과 즐거운 러닝을 하고 있어요! 💪",
-      profileImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
-      preferences: {
-        pace: "5:30-6:00/km",
-        distance: "3-8km",
-        time: "저녁 (18:00-20:00)",
-        frequency: "주 3-4회"
-      },
-      tags: ["새벽러닝", "강남", "초급자환영", "건강관리"]
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 사용자 정보 로드
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userData = await getMe();
+        setUser(userData);
+        localStorage.setItem('runmate_user', JSON.stringify(userData));
+      } catch (error) {
+        console.error('Failed to load user:', error);
+        // 실패 시 localStorage에서 로드
+        const savedUser = localStorage.getItem('runmate_user');
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        }
+      } finally {
+        setIsLoading(false);
+      }
     };
-  });
+
+    loadUser();
+  }, []);
 
   const stats = {
     totalRuns: 47,
@@ -62,10 +67,29 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
     }
   }, []);
 
-  const handleSaveProfile = (updatedUser: any) => {
+  const handleSaveProfile = (updatedUser: User) => {
     setUser(updatedUser);
     localStorage.setItem('runmate_user', JSON.stringify(updatedUser));
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+          <p className="mt-4 text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-gray-600">사용자 정보를 불러올 수 없습니다.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -88,7 +112,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                 >
                   <div className="w-32 h-32 rounded-full overflow-hidden mx-auto border-4 border-gray-100">
                     <ImageWithFallback
-                      src={user.profileImage}
+                      src={user.profile_image}
                       alt={user.name}
                       className="w-full h-full object-cover"
                     />
@@ -121,20 +145,22 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
               </div>
 
               {/* Tags */}
-              <div className="p-6">
-                <h3 className="text-sm text-gray-500 mb-3">관심사</h3>
-                <div className="flex flex-wrap gap-2">
-                  {user.tags.map((tag, index) => (
-                    <Badge 
-                      key={index}
-                      variant="secondary"
-                      className="bg-gray-100 text-gray-700 border-0"
-                    >
-                      #{tag}
-                    </Badge>
-                  ))}
+              {user.tags && user.tags.length > 0 && (
+                <div className="p-6">
+                  <h3 className="text-sm text-gray-500 mb-3">관심사</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {user.tags.map((tag) => (
+                      <Badge
+                        key={tag.tag_id}
+                        variant="secondary"
+                        className="bg-gray-100 text-gray-700 border-0"
+                      >
+                        #{tag.tag_name}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
               
               {/* Settings Button */}
               {onNavigateToSettings && (
@@ -190,27 +216,25 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
             </div>
 
             {/* Preferences */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-6">
-              <h3 className="text-xl mb-4">러닝 선호도</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <div className="text-sm text-gray-500 mb-1">선호 페이스</div>
-                  <div className="text-lg">{user.preferences.pace}</div>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <div className="text-sm text-gray-500 mb-1">선호 거리</div>
-                  <div className="text-lg">{user.preferences.distance}</div>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <div className="text-sm text-gray-500 mb-1">선호 시간대</div>
-                  <div className="text-lg">{user.preferences.time}</div>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <div className="text-sm text-gray-500 mb-1">활동 빈도</div>
-                  <div className="text-lg">{user.preferences.frequency}</div>
+            {(user.preferred_time || user.preferred_frequency) && (
+              <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                <h3 className="text-xl mb-4">러닝 선호도</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {user.preferred_time && (
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <div className="text-sm text-gray-500 mb-1">선호 시간대</div>
+                      <div className="text-lg">{user.preferred_time}</div>
+                    </div>
+                  )}
+                  {user.preferred_frequency && (
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <div className="text-sm text-gray-500 mb-1">활동 빈도</div>
+                      <div className="text-lg">{user.preferred_frequency}</div>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Achievements */}
             <div className="bg-white rounded-2xl border border-gray-200 p-6">
