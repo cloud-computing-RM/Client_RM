@@ -6,7 +6,7 @@ import { Camera } from "lucide-react";
 
 interface ProfileImageUploadProps {
   currentImage: string;
-  onImageChange: (imageUrl: string) => void;
+  onImageChange: (imageUrl: string, file?: File) => void;
 }
 
 export function ProfileImageUpload({ currentImage, onImageChange }: ProfileImageUploadProps) {
@@ -31,7 +31,7 @@ export function ProfileImageUpload({ currentImage, onImageChange }: ProfileImage
     reader.onload = (e) => {
       const imageUrl = e.target?.result as string;
       setImagePreview(imageUrl);
-      onImageChange(imageUrl);
+      onImageChange(imageUrl, file); // File 객체도 함께 전달
     };
     reader.readAsDataURL(file);
   };

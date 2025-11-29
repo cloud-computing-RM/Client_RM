@@ -11,7 +11,7 @@ import { ProfileImageUpload } from "./profile/ProfileImageUpload";
 import { BasicInfoForm } from "./profile/BasicInfoForm";
 import { RunningPreferences } from "./profile/RunningPreferences";
 import { TagManager } from "./profile/TagManager";
-import { updateProfile, updatePreferences } from "../services/userService";
+import { updateProfile, updatePreferences, updateProfileImage } from "../services/userService";
 import type { User } from "../types";
 
 interface ProfileEditModalProps {
@@ -38,6 +38,7 @@ export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProp
     profileImage: user.profile_image || '',
   });
 
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,11 +66,14 @@ export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProp
     }));
   };
 
-  const handleImageChange = (imageUrl: string) => {
+  const handleImageChange = (imageUrl: string, file?: File) => {
     setFormData((prev) => ({
       ...prev,
       profileImage: imageUrl,
     }));
+    if (file) {
+      setProfileImageFile(file);
+    }
   };
 
   const handleSave = async () => {
@@ -77,16 +81,23 @@ export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProp
     setError(null);
 
     try {
-      // 1. 기본 프로필 정보 업데이트
+      let finalUser;
+
+      // 1. 프로필 이미지 업데이트 (파일이 선택된 경우에만)
+      if (profileImageFile) {
+        finalUser = await updateProfileImage(profileImageFile);
+      }
+
+      // 2. 기본 프로필 정보 업데이트
       const updatedUser = await updateProfile({
         name: formData.name,
         age: formData.age,
         location: formData.location,
         bio: formData.bio,
       });
+      finalUser = updatedUser;
 
-      // 2. 러닝 선호도 업데이트
-      let finalUser = updatedUser;
+      // 3. 러닝 선호도 업데이트
       if (
         formData.preferences.preferred_time ||
         formData.preferences.preferred_frequency ||

@@ -2,7 +2,7 @@
 // 사용자 프로필 관련 API 서비스
 // ===================================
 
-import { put, patch, get, uploadFile } from './apiClient';
+import { put, patch, get } from './apiClient';
 import type {
   User,
   ProfileUpdateRequest,
@@ -36,9 +36,14 @@ export async function updateProfileImage(file: File): Promise<User> {
   const formData = new FormData();
   formData.append('image', file);
 
-  const response = await uploadFile<ApiResponse<User>>(
+  const response = await patch<ApiResponse<User>>(
     '/api/users/profile-image',
-    formData
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }
   );
 
   if (!response.success || !response.data) {
