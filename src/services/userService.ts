@@ -131,3 +131,4 @@ export async function getUserProfile(userId: number): Promise<User> {
 
   return response.data;
 }
+

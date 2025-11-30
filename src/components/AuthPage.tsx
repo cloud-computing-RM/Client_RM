@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Mail, Lock, User, MapPin, ArrowLeft } from "lucide-react";
 import { login, register } from "../services/authService";
@@ -26,6 +27,7 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
     confirmPassword: "",
     age: "",
     location: "",
+    bio: "",
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -93,6 +95,7 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
         password: signupForm.password,
         age: parseInt(signupForm.age),
         location: signupForm.location,
+        bio: signupForm.bio,
       });
 
       // 토큰 저장
@@ -283,6 +286,17 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                       onChange={(e) => setSignupForm({ ...signupForm, confirmPassword: e.target.value })}
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-bio">자기소개</Label>
+                  <Textarea
+                    id="signup-bio"
+                    placeholder="간단한 자기소개를 입력해주세요..."
+                    value={signupForm.bio}
+                    onChange={(e) => setSignupForm({ ...signupForm, bio: e.target.value })}
+                    rows={3}
+                  />
                 </div>
 
                 <Button

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,8 @@ import { BasicInfoForm } from "./profile/BasicInfoForm";
 import { RunningPreferences } from "./profile/RunningPreferences";
 import { TagManager } from "./profile/TagManager";
 import { updateProfile, updatePreferences, updateProfileImage } from "../services/userService";
-import type { User } from "../types";
+import { getUserTags } from "../services/tagService";
+import type { User, Tag } from "../types";
 
 interface ProfileEditModalProps {
   user: User;
@@ -42,6 +43,19 @@ export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProp
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 모달이 열릴 때 사용자 태그 불러오기
+  useEffect(() => {
+    const loadUserTags = async () => {
+      try {
+        const userTags = await getUserTags(user.user_id);
+        setFormData(prev => ({ ...prev, tags: userTags }));
+      } catch (error) {
+        console.error('Failed to load user tags:', error);
+      }
+    };
+    loadUserTags();
+  }, [user.user_id]);
+
   const handleInputChange = (field: string, value: any) => {
     setFormData((prev) => ({
       ...prev,
@@ -49,17 +63,51 @@ export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProp
     }));
   };
 
-  const handlePreferenceChange = (field: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      preferences: {
-        ...prev.preferences,
-        [field]: value,
-      },
-    }));
+  // 페이스를 분:초 형식으로 변환
+  const formatPace = (minutes: number): string => {
+    const mins = Math.floor(minutes);
+    const secs = Math.round((minutes - mins) * 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleTagsChange = (tags: string[]) => {
+  // 페이스 문자열을 분으로 변환 (예: "5:30" -> 5.5)
+  const parsePace = (paceStr: string): number => {
+    const [mins, secs] = paceStr.split(':').map(Number);
+    return mins + (secs || 0) / 60;
+  };
+
+  const handlePreferenceChange = (field: string, value: string) => {
+    setFormData((prev) => {
+      const newPreferences = { ...prev.preferences };
+
+      if (field === 'pace') {
+        // "5:30-6:00/km" 형식을 파싱
+        const match = value.match(/(\d+:\d+)-(\d+:\d+)\/km/);
+        if (match) {
+          newPreferences.preferred_pace_min = parsePace(match[1]);
+          newPreferences.preferred_pace_max = parsePace(match[2]);
+        }
+      } else if (field === 'distance') {
+        // "3-5km" 형식을 파싱
+        const match = value.match(/(\d+)-(\d+)km/);
+        if (match) {
+          newPreferences.preferred_distance_min = parseFloat(match[1]);
+          newPreferences.preferred_distance_max = parseFloat(match[2]);
+        }
+      } else if (field === 'time') {
+        newPreferences.preferred_time = value;
+      } else if (field === 'frequency') {
+        newPreferences.preferred_frequency = value;
+      }
+
+      return {
+        ...prev,
+        preferences: newPreferences,
+      };
+    });
+  };
+
+  const handleTagsChange = (tags: Tag[]) => {
     setFormData((prev) => ({
       ...prev,
       tags,
@@ -150,7 +198,16 @@ export function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProp
           />
 
           <RunningPreferences
-            preferences={formData.preferences}
+            preferences={{
+              pace: formData.preferences.preferred_pace_min && formData.preferences.preferred_pace_max
+                ? `${formatPace(formData.preferences.preferred_pace_min)}-${formatPace(formData.preferences.preferred_pace_max)}/km`
+                : '',
+              distance: formData.preferences.preferred_distance_min && formData.preferences.preferred_distance_max
+                ? `${formData.preferences.preferred_distance_min}-${formData.preferences.preferred_distance_max}km`
+                : '',
+              time: formData.preferences.preferred_time || '',
+              frequency: formData.preferences.preferred_frequency || '',
+            }}
             onPreferenceChange={handlePreferenceChange}
           />
 

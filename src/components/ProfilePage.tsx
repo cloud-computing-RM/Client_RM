@@ -5,6 +5,7 @@ import { Badge } from "./ui/badge";
 import { ProfileEditModal } from "./ProfileEditModal";
 import { Edit, MapPin, Calendar, Heart, Target, Zap, TrendingUp, Award, Settings } from "lucide-react";
 import { getMe } from "../services/authService";
+import { getUserTags } from "../services/tagService";
 import type { User } from "../types";
 
 interface ProfilePageProps {
@@ -23,8 +24,11 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
     const loadUser = async () => {
       try {
         const userData = await getMe();
-        setUser(userData);
-        localStorage.setItem('runmate_user', JSON.stringify(userData));
+        // 사용자 태그 불러오기
+        const userTags = await getUserTags(userData.user_id);
+        const userWithTags = { ...userData, tags: userTags };
+        setUser(userWithTags);
+        localStorage.setItem('runmate_user', JSON.stringify(userWithTags));
       } catch (error) {
         console.error('Failed to load user:', error);
         // 실패 시 localStorage에서 로드
@@ -70,6 +74,13 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
   const handleSaveProfile = (updatedUser: User) => {
     setUser(updatedUser);
     localStorage.setItem('runmate_user', JSON.stringify(updatedUser));
+  };
+
+  // 페이스를 분:초 형식으로 변환
+  const formatPace = (minutes: number): string => {
+    const mins = Math.floor(minutes);
+    const secs = Math.round((minutes - mins) * 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   if (isLoading) {
@@ -141,8 +152,45 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
               {/* Bio */}
               <div className="p-6 border-b border-gray-100">
                 <h3 className="text-sm text-gray-500 mb-2">소개</h3>
-                <p className="text-sm text-gray-700 leading-relaxed">{user.bio}</p>
+                <p className="text-sm text-gray-700 leading-relaxed">{user.bio || "자기소개가 없습니다."}</p>
               </div>
+
+              {/* Running Preferences */}
+              {(user.preferred_time || user.preferred_frequency || user.preferred_pace_min || user.preferred_distance_min) && (
+                <div className="p-6 border-b border-gray-100">
+                  <h3 className="text-sm text-gray-500 mb-3">러닝 선호도</h3>
+                  <div className="space-y-2">
+                    {user.preferred_pace_min && user.preferred_pace_max && (
+                      <div className="text-sm">
+                        <span className="text-gray-500">페이스: </span>
+                        <span className="text-gray-700">
+                          {formatPace(user.preferred_pace_min)} - {formatPace(user.preferred_pace_max)}/km
+                        </span>
+                      </div>
+                    )}
+                    {user.preferred_distance_min && user.preferred_distance_max && (
+                      <div className="text-sm">
+                        <span className="text-gray-500">거리: </span>
+                        <span className="text-gray-700">
+                          {user.preferred_distance_min} - {user.preferred_distance_max}km
+                        </span>
+                      </div>
+                    )}
+                    {user.preferred_time && (
+                      <div className="text-sm">
+                        <span className="text-gray-500">시간대: </span>
+                        <span className="text-gray-700">{user.preferred_time}</span>
+                      </div>
+                    )}
+                    {user.preferred_frequency && (
+                      <div className="text-sm">
+                        <span className="text-gray-500">빈도: </span>
+                        <span className="text-gray-700">{user.preferred_frequency}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Tags */}
               {user.tags && user.tags.length > 0 && (

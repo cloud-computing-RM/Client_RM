@@ -32,6 +32,7 @@ export interface User {
   preferred_frequency?: string | null;
   created_at?: string;
   updated_at?: string;
+  tags?: Tag[];
 }
 
 // ===================================
@@ -50,6 +51,7 @@ export interface RegisterRequest {
   age: number;
   gender?: string;
   location: string;
+  bio?: string;
 }
 
 export interface AuthResponse {
@@ -89,6 +91,7 @@ export interface PreferencesUpdate {
 export interface Tag {
   tag_id: number;
   tag_name: string;
+  category: string; // "time", "level", "purpose", "social", "environment", "interest"
   created_at?: string;
 }
 
@@ -160,3 +163,4 @@ export interface ApiError {
   status?: number;
   errors?: Record<string, string[]>;
 }
+

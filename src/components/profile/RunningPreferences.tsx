@@ -25,7 +25,7 @@ export function RunningPreferences({ preferences, onPreferenceChange }: RunningP
       <div className="space-y-2">
         <Label>선호 페이스</Label>
         <Select
-          value={preferences.pace}
+          value={preferences.pace || ""}
           onValueChange={(value) => onPreferenceChange("pace", value)}
         >
           <SelectTrigger>
@@ -44,7 +44,7 @@ export function RunningPreferences({ preferences, onPreferenceChange }: RunningP
       <div className="space-y-2">
         <Label>선호 거리</Label>
         <Select
-          value={preferences.distance}
+          value={preferences.distance || ""}
           onValueChange={(value) => onPreferenceChange("distance", value)}
         >
           <SelectTrigger>
@@ -63,7 +63,7 @@ export function RunningPreferences({ preferences, onPreferenceChange }: RunningP
       <div className="space-y-2">
         <Label>선호 시간대</Label>
         <Select
-          value={preferences.time}
+          value={preferences.time || ""}
           onValueChange={(value) => onPreferenceChange("time", value)}
         >
           <SelectTrigger>
@@ -82,7 +82,7 @@ export function RunningPreferences({ preferences, onPreferenceChange }: RunningP
       <div className="space-y-2">
         <Label>운동 빈도</Label>
         <Select
-          value={preferences.frequency}
+          value={preferences.frequency || ""}
           onValueChange={(value) => onPreferenceChange("frequency", value)}
         >
           <SelectTrigger>
