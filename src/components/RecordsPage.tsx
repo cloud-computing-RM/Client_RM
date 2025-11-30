@@ -2,13 +2,16 @@ import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Plus, Zap, TrendingUp, Trophy } from "lucide-react";
 import { AddRecordModal } from "./AddRecordModal";
+import { EditRecordModal } from "./EditRecordModal";
 import { RecordCard, RunRecord } from "./records/RecordCard";
 import { PageHeader } from "./common/PageHeader";
-import { getRecords, createRecord, deleteRecord } from "../services/recordService";
-import type { RunningRecord, RunningRecordCreateRequest } from "../types";
+import { getRecords, createRecord, deleteRecord, updateRecord } from "../services/recordService";
+import type { RunningRecord, RunningRecordCreateRequest, RunningRecordUpdateRequest } from "../types";
 
 export function RecordsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<RunRecord | null>(null);
   const [records, setRecords] = useState<RunRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +97,55 @@ export function RecordsPage() {
     } catch (err: any) {
       console.error('Failed to delete record:', err);
       setError(err.message || '기록 삭제에 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditRecord = (id: number) => {
+    const record = records.find(r => r.id === id);
+    if (record) {
+      setEditingRecord(record);
+      setShowEditModal(true);
+    }
+  };
+
+  const handleUpdateRecord = async (updatedData: Omit<RunRecord, 'id'>) => {
+    if (!editingRecord) return;
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const requestData: RunningRecordUpdateRequest = {
+        date: updatedData.date,
+        distance: updatedData.distance,
+        duration: updatedData.duration,
+        pace: updatedData.pace,
+        location: updatedData.location,
+        feeling: updatedData.feeling,
+        notes: updatedData.notes,
+      };
+
+      const updated = await updateRecord(editingRecord.id, requestData);
+
+      // Backend response를 Frontend format으로 변환
+      const convertedRecord: RunRecord = {
+        id: updated.record_id,
+        date: updated.date.split('T')[0],
+        distance: Number(updated.distance),
+        duration: updated.duration,
+        pace: updated.pace,
+        location: updated.location,
+        feeling: updated.feeling,
+        notes: updated.notes || undefined,
+      };
+
+      setRecords(prev => prev.map(r => r.id === editingRecord.id ? convertedRecord : r));
+      setShowEditModal(false);
+      setEditingRecord(null);
+    } catch (err: any) {
+      console.error('Failed to update record:', err);
+      setError(err.message || '기록 수정에 실패했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -227,6 +279,7 @@ export function RecordsPage() {
                     key={record.id}
                     record={record}
                     onDelete={handleDeleteRecord}
+                    onEdit={handleEditRecord}
                   />
                 ))
               )}
@@ -240,6 +293,16 @@ export function RecordsPage() {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={handleAddRecord}
+      />
+
+      <EditRecordModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingRecord(null);
+        }}
+        onUpdate={handleUpdateRecord}
+        record={editingRecord}
       />
     </div>
   );
