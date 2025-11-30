@@ -32,7 +32,6 @@ export interface User {
   preferred_frequency?: string | null;
   created_at?: string;
   updated_at?: string;
-  tags?: Tag[];
 }
 
 // ===================================
@@ -51,7 +50,6 @@ export interface RegisterRequest {
   age: number;
   gender?: string;
   location: string;
-  bio?: string;
 }
 
 export interface AuthResponse {
@@ -91,7 +89,6 @@ export interface PreferencesUpdate {
 export interface Tag {
   tag_id: number;
   tag_name: string;
-  category: string; // "time", "level", "purpose", "social", "environment", "interest"
   created_at?: string;
 }
 
@@ -155,6 +152,92 @@ export interface NearbyUser extends User {
 }
 
 // ===================================
+// Post 관련 타입
+// ===================================
+
+export interface Post {
+  post_id: number;
+  user_id: number;
+  title?: string | null;
+  content: string;
+  post_type: 'general' | 'question' | 'review';
+  view_count: number;
+  like_count: number;
+  comment_count: number;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  user?: {
+    user_id: number;
+    name: string;
+    profile_image?: string | null;
+  };
+  images?: PostImage[];
+  _count?: {
+    comments: number;
+    post_likes: number;
+  };
+}
+
+export interface PostImage {
+  image_id: number;
+  post_id: number;
+  image_url: string;
+  image_order: number;
+  created_at?: string;
+}
+
+export interface PostCreateRequest {
+  title?: string;
+  content: string;
+  post_type?: 'general' | 'question' | 'review';
+  images?: string[];
+}
+
+export interface PostUpdateRequest {
+  title?: string;
+  content?: string;
+  post_type?: 'general' | 'question' | 'review';
+}
+
+export interface PostListQuery {
+  post_type?: 'general' | 'question' | 'review';
+  search?: string;
+  limit?: number;
+  offset?: number;
+  sort?: 'created_at_desc' | 'popular' | 'liked';
+}
+
+export interface PostListResponse {
+  posts: Post[];
+  total: number;
+  has_more: boolean;
+}
+
+// ===================================
+// Comment 관련 타입
+// ===================================
+
+export interface Comment {
+  comment_id: number;
+  post_id: number;
+  user_id: number;
+  content: string;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  user?: {
+    user_id: number;
+    name: string;
+    profile_image?: string | null;
+  };
+}
+
+export interface CommentCreateRequest {
+  content: string;
+}
+
+// ===================================
 // Error 관련 타입
 // ===================================
 
@@ -163,4 +246,3 @@ export interface ApiError {
   status?: number;
   errors?: Record<string, string[]>;
 }
-
