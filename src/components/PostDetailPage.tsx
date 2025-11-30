@@ -11,7 +11,7 @@ import {
 } from "./ui/dropdown-menu";
 import { useState, useRef, useEffect } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
-import { getPost, getComments, createComment, likePost, unlikePost, deletePost } from "../services/postService";
+import { getPost, getComments, createComment, deleteComment, likePost, unlikePost, deletePost } from "../services/postService";
 import type { Post, Comment } from "../types";
 
 interface PostDetailPageProps {
@@ -168,6 +168,24 @@ export function PostDetailPage({ postId, onBack }: PostDetailPageProps) {
       alert(err.message || '댓글 작성에 실패했습니다.');
     } finally {
       setCommentLoading(false);
+    }
+  };
+
+  // 댓글 삭제
+  const handleCommentDelete = async (commentId: number) => {
+    if (!window.confirm('정말 이 댓글을 삭제하시겠습니까?')) return;
+
+    try {
+      await deleteComment(commentId);
+      setComments(comments.filter(c => c.comment_id !== commentId));
+
+      // 댓글 수 업데이트
+      if (post) {
+        setPost({ ...post, comment_count: post.comment_count - 1 });
+      }
+    } catch (err: any) {
+      console.error('댓글 삭제 에러:', err);
+      alert(err.message || '댓글 삭제에 실패했습니다.');
     }
   };
 
@@ -484,6 +502,14 @@ export function PostDetailPage({ postId, onBack }: PostDetailPageProps) {
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-sm font-medium">{comment.user?.name || "익명"}</span>
                       <span className="text-xs text-gray-500">{getRelativeTime(comment.created_at)}</span>
+                      {currentUser && comment.user_id === currentUser.user_id && (
+                        <button
+                          onClick={() => handleCommentDelete(comment.comment_id)}
+                          className="ml-auto text-xs text-red-500 hover:text-red-700"
+                        >
+                          삭제
+                        </button>
+                      )}
                     </div>
                     <p className="text-sm text-gray-700">{comment.content}</p>
                   </div>

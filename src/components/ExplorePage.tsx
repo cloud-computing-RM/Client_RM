@@ -3,6 +3,7 @@ import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Badge } from "./ui/badge";
 import { Heart, MapPin, Clock, Users, X, RotateCcw, Zap } from "lucide-react";
 import { Button } from "./ui/button";
+import { sendLike } from "../services/likeService";
 
 export function ExplorePage() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -10,6 +11,8 @@ export function ExplorePage() {
   const [dragStart, setDragStart] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isLiking, setIsLiking] = useState(false);
+  const [matchNotification, setMatchNotification] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const runningProfiles = [
@@ -136,26 +139,43 @@ export function ExplorePage() {
 
   const currentProfile = runningProfiles[currentIndex];
 
-  const handleLike = () => {
-    if (!currentProfile) return;
-    
-    const newLikedProfiles = [...likedProfiles, currentProfile.id];
-    setLikedProfiles(newLikedProfiles);
-    
-    // localStorage에 저장 (전체 프로필 정보도 함께 저장)
+  const handleLike = async () => {
+    if (!currentProfile || isLiking) return;
+
     try {
-      localStorage.setItem('runmate_liked_profiles', JSON.stringify(newLikedProfiles));
-      const likedProfilesData = JSON.parse(localStorage.getItem('runmate_liked_profiles_data') || '[]');
-      // 중복 방지: 이미 있는지 체크
-      if (!likedProfilesData.find((p: any) => p.id === currentProfile.id)) {
-        likedProfilesData.push(currentProfile);
-        localStorage.setItem('runmate_liked_profiles_data', JSON.stringify(likedProfilesData));
+      setIsLiking(true);
+
+      // API로 좋아요 보내기
+      const result = await sendLike(currentProfile.id);
+
+      // 매칭 알림
+      if (result.isMatch) {
+        setMatchNotification(`${currentProfile.name}님과 매칭되었습니다! 🎉`);
+        setTimeout(() => setMatchNotification(null), 3000);
       }
-    } catch (error) {
-      console.error('Error saving liked profiles:', error);
+
+      // localStorage에도 저장 (백업 및 오프라인 지원)
+      const newLikedProfiles = [...likedProfiles, currentProfile.id];
+      setLikedProfiles(newLikedProfiles);
+
+      try {
+        localStorage.setItem('runmate_liked_profiles', JSON.stringify(newLikedProfiles));
+        const likedProfilesData = JSON.parse(localStorage.getItem('runmate_liked_profiles_data') || '[]');
+        if (!likedProfilesData.find((p: any) => p.id === currentProfile.id)) {
+          likedProfilesData.push(currentProfile);
+          localStorage.setItem('runmate_liked_profiles_data', JSON.stringify(likedProfilesData));
+        }
+      } catch (error) {
+        console.error('Error saving to localStorage:', error);
+      }
+
+      nextProfile();
+    } catch (error: any) {
+      console.error('좋아요 보내기 실패:', error);
+      alert(error.message || '좋아요 보내기에 실패했습니다.');
+    } finally {
+      setIsLiking(false);
     }
-    
-    nextProfile();
   };
 
   const handlePass = () => {
@@ -265,6 +285,16 @@ export function ExplorePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* 매칭 알림 */}
+      {matchNotification && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-top duration-300">
+          <div className="bg-green-500 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-2">
+            <Heart size={20} fill="white" />
+            <span className="font-medium">{matchNotification}</span>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Header */}
         <div className="flex items-center justify-between mb-12">
@@ -441,13 +471,15 @@ export function ExplorePage() {
             <div className="flex justify-center gap-6">
               <button
                 onClick={handlePass}
-                className="w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center border-2 border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all active:scale-95"
+                disabled={isLiking}
+                className="w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center border-2 border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <X size={28} className="text-gray-600 hover:text-red-500 transition-colors" />
               </button>
               <button
                 onClick={handleLike}
-                className="w-20 h-20 bg-black rounded-full shadow-xl flex items-center justify-center hover:bg-gray-800 transition-all active:scale-95"
+                disabled={isLiking}
+                className="w-20 h-20 bg-black rounded-full shadow-xl flex items-center justify-center hover:bg-gray-800 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Heart size={32} className="text-white" fill="white" />
               </button>

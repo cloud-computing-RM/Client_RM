@@ -5,8 +5,7 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Loader2, X, ImagePlus } from "lucide-react";
-import { createPost } from "../services/postService";
-import { tokenStorage } from "../services/apiClient";
+import { createPost, uploadImage } from "../services/postService";
 import type { PostCreateRequest } from "../types";
 
 interface CreatePostModalProps {
@@ -21,59 +20,43 @@ export function CreatePostModal({ open, onClose, onSuccess }: CreatePostModalPro
   const [postType, setPostType] = useState<'general' | 'question' | 'review'>('general');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [images, setImages] = useState<string[]>([]);
-  const [uploadingImages, setUploadingImages] = useState(false);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
-  // 이미지 업로드 핸들러
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 이미지 선택 핸들러 (미리보기만 생성)
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     // 최대 5개까지만
-    if (images.length + files.length > 5) {
-      setError("이미지는 최대 5개까지만 업로드할 수 있습니다.");
+    if (imageFiles.length + files.length > 5) {
+      setError("이미지는 최대 5개까지만 선택할 수 있습니다.");
       return;
     }
 
-    setUploadingImages(true);
     setError(null);
 
-    try {
-      const uploadPromises = Array.from(files).map(async (file) => {
-        const formData = new FormData();
-        formData.append('image', file);
+    const newFiles = Array.from(files);
+    const newPreviews: string[] = [];
 
-        const token = tokenStorage.get();
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-        const response = await fetch(`${apiUrl}/api/upload`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-          body: formData,
-        });
-
-        if (!response.ok) {
-          throw new Error('이미지 업로드에 실패했습니다.');
+    // 미리보기 URL 생성
+    newFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        newPreviews.push(reader.result as string);
+        if (newPreviews.length === newFiles.length) {
+          setImageFiles([...imageFiles, ...newFiles]);
+          setImagePreviews([...imagePreviews, ...newPreviews]);
         }
-
-        const data = await response.json();
-        return data.imageUrl;
-      });
-
-      const uploadedUrls = await Promise.all(uploadPromises);
-      setImages([...images, ...uploadedUrls]);
-    } catch (err: any) {
-      setError(err.message || '이미지 업로드에 실패했습니다.');
-    } finally {
-      setUploadingImages(false);
-    }
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   // 이미지 삭제
   const handleRemoveImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
+    setImageFiles(imageFiles.filter((_, i) => i !== index));
+    setImagePreviews(imagePreviews.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,6 +71,25 @@ export function CreatePostModal({ open, onClose, onSuccess }: CreatePostModalPro
       setLoading(true);
       setError(null);
 
+      console.log('게시글 작성 시작');
+
+      // 1. 이미지 파일들을 먼저 업로드
+      let uploadedImageUrls: string[] = [];
+      if (imageFiles.length > 0) {
+        console.log(`${imageFiles.length}개의 이미지 업로드 시작`);
+        try {
+          const uploadPromises = imageFiles.map((file) => uploadImage(file));
+          uploadedImageUrls = await Promise.all(uploadPromises);
+          console.log('이미지 업로드 완료:', uploadedImageUrls);
+        } catch (uploadErr: any) {
+          console.error('이미지 업로드 실패:', uploadErr);
+          setError(uploadErr.message || "이미지 업로드에 실패했습니다.");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. 게시글 작성
       const data: PostCreateRequest = {
         content: content.trim(),
         post_type: postType,
@@ -97,20 +99,25 @@ export function CreatePostModal({ open, onClose, onSuccess }: CreatePostModalPro
         data.title = title.trim();
       }
 
-      if (images.length > 0) {
-        data.images = images;
+      if (uploadedImageUrls.length > 0) {
+        data.images = uploadedImageUrls;
       }
 
-      await createPost(data);
+      console.log('게시글 작성 요청 데이터:', data);
+
+      const result = await createPost(data);
+      console.log('게시글 작성 완료:', result);
 
       // 성공 시 폼 초기화 및 모달 닫기
       setTitle("");
       setContent("");
       setPostType('general');
-      setImages([]);
+      setImageFiles([]);
+      setImagePreviews([]);
       onSuccess();
       onClose();
     } catch (err: any) {
+      console.error('게시글 작성 실패:', err);
       setError(err.message || "게시글 작성에 실패했습니다.");
     } finally {
       setLoading(false);
@@ -118,11 +125,12 @@ export function CreatePostModal({ open, onClose, onSuccess }: CreatePostModalPro
   };
 
   const handleClose = () => {
-    if (!loading && !uploadingImages) {
+    if (!loading) {
       setTitle("");
       setContent("");
       setPostType('general');
-      setImages([]);
+      setImageFiles([]);
+      setImagePreviews([]);
       setError(null);
       onClose();
     }
@@ -191,20 +199,20 @@ export function CreatePostModal({ open, onClose, onSuccess }: CreatePostModalPro
             </label>
 
             {/* 이미지 미리보기 */}
-            {images.length > 0 && (
+            {imagePreviews.length > 0 && (
               <div className="grid grid-cols-3 gap-2 mb-3">
-                {images.map((url, index) => (
+                {imagePreviews.map((url, index) => (
                   <div key={index} className="relative group">
                     <img
                       src={url}
-                      alt={`업로드 이미지 ${index + 1}`}
+                      alt={`선택된 이미지 ${index + 1}`}
                       className="w-full h-32 object-cover rounded-lg"
                     />
                     <button
                       type="button"
                       onClick={() => handleRemoveImage(index)}
                       className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      disabled={loading || uploadingImages}
+                      disabled={loading}
                     >
                       <X size={16} />
                     </button>
@@ -213,8 +221,8 @@ export function CreatePostModal({ open, onClose, onSuccess }: CreatePostModalPro
               </div>
             )}
 
-            {/* 업로드 버튼 */}
-            {images.length < 5 && (
+            {/* 이미지 선택 버튼 */}
+            {imageFiles.length < 5 && (
               <div>
                 <input
                   type="file"
@@ -223,25 +231,16 @@ export function CreatePostModal({ open, onClose, onSuccess }: CreatePostModalPro
                   multiple
                   onChange={handleImageUpload}
                   className="hidden"
-                  disabled={loading || uploadingImages}
+                  disabled={loading}
                 />
                 <label
                   htmlFor="image-upload"
                   className={`flex items-center justify-center gap-2 w-full border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-gray-400 transition-colors ${
-                    (loading || uploadingImages) ? 'opacity-50 cursor-not-allowed' : ''
+                    loading ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 >
-                  {uploadingImages ? (
-                    <>
-                      <Loader2 className="animate-spin" size={20} />
-                      <span>업로드 중...</span>
-                    </>
-                  ) : (
-                    <>
-                      <ImagePlus size={20} />
-                      <span>이미지 추가 ({images.length}/5)</span>
-                    </>
-                  )}
+                  <ImagePlus size={20} />
+                  <span>이미지 추가 ({imageFiles.length}/5)</span>
                 </label>
               </div>
             )}
@@ -260,17 +259,17 @@ export function CreatePostModal({ open, onClose, onSuccess }: CreatePostModalPro
               type="button"
               variant="outline"
               onClick={handleClose}
-              disabled={loading || uploadingImages}
+              disabled={loading}
             >
               취소
             </Button>
             <Button
               type="submit"
-              disabled={loading || uploadingImages || !content.trim()}
+              disabled={loading || !content.trim()}
               className="bg-black hover:bg-gray-800 text-white"
             >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {loading ? "작성 중..." : "작성하기"}
+              {loading ? (imageFiles.length > 0 ? "업로드 및 작성 중..." : "작성 중...") : "작성하기"}
             </Button>
           </div>
         </form>
