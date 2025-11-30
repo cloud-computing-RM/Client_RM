@@ -6,6 +6,7 @@ import { ProfileEditModal } from "./ProfileEditModal";
 import { Edit, MapPin, Calendar, Heart, Target, Zap, TrendingUp, Award, Settings } from "lucide-react";
 import { getMe } from "../services/authService";
 import { getUserTags } from "../services/tagService";
+import { getRunningStats, type RunningStats } from "../services/recordService";
 import type { User } from "../types";
 
 interface ProfilePageProps {
@@ -18,6 +19,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
   const [likedProfiles, setLikedProfiles] = useState<any[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<RunningStats | null>(null);
 
   // 사용자 정보 로드
   useEffect(() => {
@@ -44,12 +46,26 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
     loadUser();
   }, []);
 
-  const stats = {
-    totalRuns: 47,
-    totalDistance: 234.5,
-    avgPace: "5:42/km",
-    connections: 12
-  };
+  // 러닝 통계 로드
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const statsData = await getRunningStats();
+        setStats(statsData);
+      } catch (error) {
+        console.error('Failed to load stats:', error);
+        // 실패 시 기본값 설정
+        setStats({
+          total_runs: 0,
+          total_distance: 0,
+          total_duration: "00:00:00",
+          average_pace: "0:00/km"
+        });
+      }
+    };
+
+    loadStats();
+  }, []);
 
   const achievements = [
     { id: 1, title: "첫 러닝", description: "첫 러닝 기록 달성", icon: "🏃‍♂️", color: "bg-blue-50 text-blue-600" },
@@ -234,7 +250,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center mb-3">
                   <TrendingUp size={20} className="text-blue-500" />
                 </div>
-                <div className="text-2xl mb-1">{stats.totalRuns}</div>
+                <div className="text-2xl mb-1">{stats?.total_runs ?? 0}</div>
                 <div className="text-sm text-gray-600">총 런</div>
               </div>
 
@@ -242,7 +258,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                 <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center mb-3">
                   <Target size={20} className="text-green-500" />
                 </div>
-                <div className="text-2xl mb-1">{stats.totalDistance}<span className="text-sm text-gray-500 ml-1">km</span></div>
+                <div className="text-2xl mb-1">{stats?.total_distance.toFixed(1) ?? '0.0'}<span className="text-sm text-gray-500 ml-1">km</span></div>
                 <div className="text-sm text-gray-600">총 거리</div>
               </div>
 
@@ -250,7 +266,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                 <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center mb-3">
                   <Zap size={20} className="text-purple-500" />
                 </div>
-                <div className="text-2xl mb-1 text-sm">{stats.avgPace}</div>
+                <div className="text-2xl mb-1 text-sm">{stats?.average_pace ?? '0:00/km'}</div>
                 <div className="text-sm text-gray-600">평균 페이스</div>
               </div>
 
@@ -258,7 +274,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                 <div className="w-10 h-10 bg-pink-50 rounded-xl flex items-center justify-center mb-3">
                   <Heart size={20} className="text-pink-500" />
                 </div>
-                <div className="text-2xl mb-1">{stats.connections}</div>
+                <div className="text-2xl mb-1">{likedProfiles.length}</div>
                 <div className="text-sm text-gray-600">메이트</div>
               </div>
             </div>

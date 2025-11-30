@@ -1,57 +1,125 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Plus, Zap, TrendingUp, Trophy } from "lucide-react";
 import { AddRecordModal } from "./AddRecordModal";
 import { RecordCard, RunRecord } from "./records/RecordCard";
 import { PageHeader } from "./common/PageHeader";
+import { getRecords, createRecord, deleteRecord } from "../services/recordService";
+import type { RunningRecord, RunningRecordCreateRequest } from "../types";
 
 export function RecordsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
-  const [records, setRecords] = useState<RunRecord[]>([
-    {
-      id: 1,
-      date: "2024-12-29",
-      distance: 5.2,
-      duration: "28:45",
-      pace: "5:32/km",
-      location: "한강공원",
-      notes: "날씨가 좋아서 기분 좋게 뛸 수 있었어요!",
-      feeling: 'great'
-    },
-    {
-      id: 2,
-      date: "2024-12-27",
-      distance: 3.8,
-      duration: "22:30",
-      pace: "5:55/km",
-      location: "올림픽공원",
-      notes: "조금 피곤했지만 완주!",
-      feeling: 'normal'
-    },
-    {
-      id: 3,
-      date: "2024-12-25",
-      distance: 7.1,
-      duration: "42:15",
-      pace: "5:57/km",
-      location: "청계천",
-      notes: "크리스마스 특별 런! 사람이 많았어요",
-      feeling: 'good'
-    }
-  ]);
+  const [records, setRecords] = useState<RunRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleAddRecord = (newRecord: Omit<RunRecord, 'id'>) => {
-    const record = {
-      ...newRecord,
-      id: Date.now()
-    };
-    setRecords(prev => [record, ...prev]);
-    setShowAddModal(false);
+  // 러닝 기록 목록 로드
+  useEffect(() => {
+    loadRecords();
+  }, []);
+
+  const loadRecords = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await getRecords({ sort: 'date_desc' });
+      // Backend RunningRecord to Frontend RunRecord 변환
+      const convertedRecords: RunRecord[] = response.records.map((record) => ({
+        id: record.record_id,
+        date: record.date.split('T')[0], // ISO date to YYYY-MM-DD
+        distance: Number(record.distance),
+        duration: record.duration,
+        pace: record.pace,
+        location: record.location,
+        feeling: record.feeling,
+        notes: record.notes || undefined,
+      }));
+      setRecords(convertedRecords);
+    } catch (err: any) {
+      console.error('Failed to load records:', err);
+      setError(err.message || '기록을 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddRecord = async (newRecord: Omit<RunRecord, 'id'>) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const requestData: RunningRecordCreateRequest = {
+        date: newRecord.date,
+        distance: newRecord.distance,
+        duration: newRecord.duration,
+        pace: newRecord.pace,
+        location: newRecord.location,
+        feeling: newRecord.feeling,
+        notes: newRecord.notes,
+      };
+
+      const createdRecord = await createRecord(requestData);
+
+      // Backend response를 Frontend format으로 변환
+      const convertedRecord: RunRecord = {
+        id: createdRecord.record_id,
+        date: createdRecord.date.split('T')[0],
+        distance: Number(createdRecord.distance),
+        duration: createdRecord.duration,
+        pace: createdRecord.pace,
+        location: createdRecord.location,
+        feeling: createdRecord.feeling,
+        notes: createdRecord.notes || undefined,
+      };
+
+      setRecords(prev => [convertedRecord, ...prev]);
+      setShowAddModal(false);
+    } catch (err: any) {
+      console.error('Failed to create record:', err);
+      setError(err.message || '기록 추가에 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteRecord = async (id: number) => {
+    if (!confirm('정말 이 기록을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      await deleteRecord(id);
+      setRecords(prev => prev.filter(record => record.id !== id));
+    } catch (err: any) {
+      console.error('Failed to delete record:', err);
+      setError(err.message || '기록 삭제에 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const totalDistance = records.reduce((sum, record) => sum + record.distance, 0);
   const totalRuns = records.length;
-  const avgPace = "5:48/km";
+
+  // 평균 페이스 계산: 총 시간 / 총 거리
+  const calculateAvgPace = () => {
+    if (records.length === 0) return "0:00/km";
+
+    let totalSeconds = 0;
+    records.forEach(record => {
+      const [minutes, seconds] = record.duration.split(':').map(Number);
+      totalSeconds += (minutes * 60) + (seconds || 0);
+    });
+
+    const avgPaceMinutes = totalSeconds / 60 / totalDistance;
+    const paceMin = Math.floor(avgPaceMinutes);
+    const paceSec = Math.round((avgPaceMinutes - paceMin) * 60);
+
+    return `${paceMin}:${paceSec.toString().padStart(2, '0')}/km`;
+  };
+
+  const avgPace = calculateAvgPace();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -70,7 +138,18 @@ export function RecordsPage() {
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid lg:grid-cols-3 gap-8">
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
+            {error}
+          </div>
+        )}
+
+        {isLoading && records.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-600">기록을 불러오는 중...</div>
+          </div>
+        ) : (
+          <div className="grid lg:grid-cols-3 gap-8">
           {/* Left: Stats & Overview */}
           <div className="lg:col-span-1 space-y-6">
             {/* Summary Stats */}
@@ -144,20 +223,24 @@ export function RecordsPage() {
                 </div>
               ) : (
                 records.map((record) => (
-                  <RecordCard key={record.id} record={record} />
+                  <RecordCard
+                    key={record.id}
+                    record={record}
+                    onDelete={handleDeleteRecord}
+                  />
                 ))
               )}
             </div>
           </div>
-        </div>
+          </div>
+        )}
       </div>
 
-      {showAddModal && (
-        <AddRecordModal
-          onClose={() => setShowAddModal(false)}
-          onAdd={handleAddRecord}
-        />
-      )}
+      <AddRecordModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddRecord}
+      />
     </div>
   );
 }

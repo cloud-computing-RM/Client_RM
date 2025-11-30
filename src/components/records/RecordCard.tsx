@@ -1,4 +1,5 @@
-import { Calendar, MapPin, Clock } from "lucide-react";
+import { Calendar, MapPin, Clock, Trash2 } from "lucide-react";
+import { Button } from "../ui/button";
 
 export interface RunRecord {
   id: number;
@@ -13,9 +14,10 @@ export interface RunRecord {
 
 interface RecordCardProps {
   record: RunRecord;
+  onDelete?: (id: number) => void;
 }
 
-export function RecordCard({ record }: RecordCardProps) {
+export function RecordCard({ record, onDelete }: RecordCardProps) {
   const getFeelingColor = (feeling: RunRecord['feeling']) => {
     switch (feeling) {
       case 'great': return 'bg-green-500';
@@ -69,9 +71,23 @@ export function RecordCard({ record }: RecordCardProps) {
       </div>
 
       {record.notes && (
-        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg mb-3">
           {record.notes}
         </p>
+      )}
+
+      {onDelete && (
+        <div className="flex justify-end pt-3 border-t border-gray-100">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(record.id)}
+            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+          >
+            <Trash2 size={16} className="mr-1" />
+            삭제
+          </Button>
+        </div>
       )}
     </div>
   );

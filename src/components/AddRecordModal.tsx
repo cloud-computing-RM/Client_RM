@@ -16,7 +16,7 @@ interface AddRecordModalProps {
     pace: string;
     location: string;
     notes?: string;
-    feeling: 'great' | 'good' | 'okay' | 'tired';
+    feeling: 'great' | 'good' | 'normal' | 'tired';
   }) => void;
 }
 
@@ -27,7 +27,7 @@ export function AddRecordModal({ isOpen, onClose, onAdd }: AddRecordModalProps) 
     duration: '',
     location: '',
     notes: '',
-    feeling: 'good' as 'great' | 'good' | 'okay' | 'tired'
+    feeling: 'good' as 'great' | 'good' | 'normal' | 'tired'
   });
 
   const calculatePace = (distance: number, duration: string): string => {
@@ -140,7 +140,7 @@ export function AddRecordModal({ isOpen, onClose, onAdd }: AddRecordModalProps) 
               <SelectContent>
                 <SelectItem value="great">최고 😄</SelectItem>
                 <SelectItem value="good">좋음 😊</SelectItem>
-                <SelectItem value="okay">보통 😐</SelectItem>
+                <SelectItem value="normal">보통 😐</SelectItem>
                 <SelectItem value="tired">피곤 😴</SelectItem>
               </SelectContent>
             </Select>
