@@ -2,7 +2,7 @@
 // 인증 관련 API 서비스
 // ===================================
 
-import { post } from './apiClient';
+import { post, get } from './apiClient';
 import { tokenStorage } from './apiClient';
 import type {
   LoginRequest,
@@ -122,4 +122,18 @@ export function getCurrentUser(): User | null {
     console.error('사용자 정보 파싱 실패:', error);
     return null;
   }
+}
+
+/**
+ * 내 정보 조회 (서버에서 최신 정보 가져오기)
+ * GET /api/auth/me
+ */
+export async function getMe(): Promise<User> {
+  const response = await get<ApiResponse<User>>('/api/auth/me');
+
+  if (!response.success || !response.data) {
+    throw new Error(response.message || '사용자 정보 조회에 실패했습니다.');
+  }
+
+  return response.data;
 }
