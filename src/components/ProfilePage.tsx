@@ -3,10 +3,11 @@ import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { ProfileEditModal } from "./ProfileEditModal";
-import { Edit, MapPin, Calendar, Heart, Target, Zap, TrendingUp, Award, Settings } from "lucide-react";
+import { Edit, MapPin, Calendar, Heart, Target, Zap, TrendingUp, Award, Settings, Loader2 } from "lucide-react";
 import { getMe } from "../services/authService";
 import { getUserTags } from "../services/tagService";
 import { getRunningStats, type RunningStats } from "../services/recordService";
+import { getUserAchievements, type UserAchievement } from "../services/achievementService";
 import type { User } from "../types";
 
 interface ProfilePageProps {
@@ -20,6 +21,8 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<RunningStats | null>(null);
+  const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
 
   // 사용자 정보 로드
   useEffect(() => {
@@ -67,14 +70,33 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
     loadStats();
   }, []);
 
-  const achievements = [
-    { id: 1, title: "첫 러닝", description: "첫 러닝 기록 달성", icon: "🏃‍♂️", color: "bg-blue-50 text-blue-600" },
-    { id: 2, title: "50km 달성", description: "누적 50km 달성", icon: "🎯", color: "bg-green-50 text-green-600" },
-    { id: 3, title: "소셜 러너", description: "5명의 메이트와 연결", icon: "👥", color: "bg-purple-50 text-purple-600" },
-    { id: 4, title: "꾸준함", description: "7일 연속 러닝", icon: "🔥", color: "bg-orange-50 text-orange-600" },
-  ];
+  // 아이콘 및 색상 매핑 함수
+  const getAchievementIcon = (conditionType: string): string => {
+    const iconMap: Record<string, string> = {
+      'run_distance': '🎯',
+      'run_count': '🏃‍♂️',
+      'match_count': '👥',
+      'streak_days': '🔥',
+      'first_run': '⭐',
+      'speed': '⚡',
+      'consistency': '📅',
+    };
+    return iconMap[conditionType] || '🏆';
+  };
 
-  // localStorage에서 좋아요한 프로필 불러오기
+  const getAchievementColor = (index: number): string => {
+    const colors = [
+      'bg-blue-50 text-blue-600',
+      'bg-green-50 text-green-600',
+      'bg-purple-50 text-purple-600',
+      'bg-orange-50 text-orange-600',
+      'bg-pink-50 text-pink-600',
+      'bg-yellow-50 text-yellow-600',
+    ];
+    return colors[index % colors.length];
+  };
+
+  // localStorage에서 좋아요한 프로필 불러오기 & 업적 불러오기
   useEffect(() => {
     const savedData = localStorage.getItem('runmate_liked_profiles_data');
     if (savedData) {
@@ -85,7 +107,25 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
         console.error('Error loading liked profiles:', error);
       }
     }
-  }, []);
+
+    // 업적 데이터 불러오기
+    const loadAchievements = async () => {
+      if (!user?.user_id) return;
+
+      try {
+        setAchievementsLoading(true);
+        const achievements = await getUserAchievements(user.user_id);
+        setUserAchievements(achievements);
+      } catch (error: any) {
+        console.error('업적 로드 실패:', error);
+        // 에러가 나도 UI는 계속 표시
+      } finally {
+        setAchievementsLoading(false);
+      }
+    };
+
+    loadAchievements();
+  }, [user?.user_id]);
 
   const handleSaveProfile = (updatedUser: User) => {
     setUser(updatedUser);
@@ -133,7 +173,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden sticky top-24">
               {/* Profile Header */}
               <div className="p-6 text-center border-b border-gray-100">
-                <button 
+                <button
                   onClick={() => setIsEditModalOpen(true)}
                   className="relative group mx-auto block mb-4"
                 >
@@ -148,14 +188,14 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                     <Edit size={24} className="text-white" />
                   </div>
                 </button>
-                
+
                 <h2 className="text-2xl mb-1">{user.name}, {user.age}</h2>
                 <div className="flex items-center justify-center text-gray-600 text-sm mb-4">
                   <MapPin size={14} className="mr-1" />
                   {user.location}
                 </div>
-                
-                <Button 
+
+                <Button
                   onClick={() => setIsEditModalOpen(true)}
                   variant="outline"
                   className="w-full"
@@ -225,7 +265,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                   </div>
                 </div>
               )}
-              
+
               {/* Settings Button */}
               {onNavigateToSettings && (
                 <div className="p-6 border-t border-gray-100">
@@ -306,18 +346,40 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                 <Award size={20} />
                 <h3 className="text-xl">업적</h3>
               </div>
-              <div className="grid md:grid-cols-2 gap-4">
-                {achievements.map((achievement) => (
-                  <div 
-                    key={achievement.id}
-                    className={`${achievement.color} rounded-xl p-4`}
-                  >
-                    <div className="text-3xl mb-2">{achievement.icon}</div>
-                    <div className="mb-1">{achievement.title}</div>
-                    <div className="text-sm opacity-80">{achievement.description}</div>
-                  </div>
-                ))}
-              </div>
+              {achievementsLoading ? (
+                <div className="flex justify-center items-center py-12">
+                  <Loader2 className="animate-spin" size={40} />
+                </div>
+              ) : userAchievements.length === 0 ? (
+                <div className="text-center py-12">
+                  <Award size={48} className="mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-600">아직 획득한 업적이 없습니다</p>
+                  <p className="text-sm text-gray-500 mt-2">러닝을 시작하고 업적을 달성해보세요!</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {userAchievements.slice(0, 4).map((userAchievement, index) => {
+                    const achievement = userAchievement.achievement;
+                    if (!achievement) return null;
+
+                    return (
+                      <div
+                        key={userAchievement.user_achievement_id}
+                        className={`${getAchievementColor(index)} rounded-xl p-4`}
+                      >
+                        <div className="text-3xl mb-2">
+                          {achievement.icon || getAchievementIcon(achievement.condition_type)}
+                        </div>
+                        <div className="mb-1">{achievement.name}</div>
+                        <div className="text-sm opacity-80">{achievement.description}</div>
+                        <div className="text-xs opacity-60 mt-2">
+                          {new Date(userAchievement.achieved_at).toLocaleDateString('ko-KR')}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Liked Mates */}
@@ -329,7 +391,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                     <h3 className="text-xl">관심있는 메이트</h3>
                   </div>
                   {onNavigateToLikedMates && (
-                    <Button 
+                    <Button
                       onClick={onNavigateToLikedMates}
                       variant="ghost"
                       size="sm"

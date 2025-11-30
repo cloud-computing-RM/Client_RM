@@ -38,12 +38,29 @@ export const tokenStorage = {
 apiClient.interceptors.request.use(
   (config) => {
     const token = tokenStorage.get();
-    if (token && config.headers) {
+    console.log('Request 인터셉터:', {
+      url: config.url,
+      method: config.method,
+      hasToken: !!token,
+      token: token ? `${token.substring(0, 20)}...` : null,
+      headers: config.headers
+    });
+
+    if (token) {
+      // headers가 없으면 생성
+      if (!config.headers) {
+        config.headers = {} as any;
+      }
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('Authorization 헤더 추가됨:', config.headers.Authorization?.substring(0, 30));
+    } else {
+      console.warn('토큰이 없음');
     }
+
     return config;
   },
   (error) => {
+    console.error('Request 인터셉터 에러:', error);
     return Promise.reject(error);
   }
 );
@@ -93,7 +110,9 @@ export async function get<T>(
   url: string,
   config?: AxiosRequestConfig
 ): Promise<T> {
+  console.log('get 함수 호출:', { url, config });
   const response = await apiClient.get<T>(url, config);
+  console.log('get 응답:', response.data);
   return response.data;
 }
 
@@ -102,7 +121,9 @@ export async function post<T>(
   data?: any,
   config?: AxiosRequestConfig
 ): Promise<T> {
+  console.log('post 함수 호출:', { url, hasData: !!data, config });
   const response = await apiClient.post<T>(url, data, config);
+  console.log('post 응답:', response.data);
   return response.data;
 }
 
@@ -111,7 +132,9 @@ export async function put<T>(
   data?: any,
   config?: AxiosRequestConfig
 ): Promise<T> {
+  console.log('put 함수 호출:', { url, hasData: !!data, config });
   const response = await apiClient.put<T>(url, data, config);
+  console.log('put 응답:', response.data);
   return response.data;
 }
 
@@ -128,7 +151,9 @@ export async function del<T>(
   url: string,
   config?: AxiosRequestConfig
 ): Promise<T> {
+  console.log('del 함수 호출:', { url, config });
   const response = await apiClient.delete<T>(url, config);
+  console.log('del 응답:', response.data);
   return response.data;
 }
 
@@ -143,6 +168,7 @@ export async function uploadFile<T>(
   const response = await apiClient.post<T>(url, formData, {
     ...config,
     headers: {
+      ...config?.headers,
       'Content-Type': 'multipart/form-data',
     },
   });
@@ -150,4 +176,3 @@ export async function uploadFile<T>(
 }
 
 export default apiClient;
-

@@ -1,126 +1,40 @@
 import { useState, useEffect } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Badge } from "./ui/badge";
-import { MessageSquare, Search } from "lucide-react";
+import { MessageSquare, Search, Loader2 } from "lucide-react";
 import { Input } from "./ui/input";
+import { getChatRooms, type ChatRoomUser } from "../services/chatService";
 
 interface ChatPageProps {
   onChatRoomClick: (chatRoomId: number) => void;
 }
 
-interface ChatRoom {
-  chat_room_user_id: number;
-  unread_count: number;
-  last_read_at: string | null;
-  joined_at: string;
-  chat_room: {
-    chat_room_id: number;
-    room_type: "direct" | "group";
-    room_name: string | null;
-    last_message_text: string | null;
-    last_message_at: string | null;
-    created_at: string;
-    updated_at: string;
-    chat_room_users: Array<{
-      user: {
-        user_id: number;
-        name: string;
-        profile_image: string | null;
-      }
-    }>;
-  };
-}
-
 export function ChatPage({ onChatRoomClick }: ChatPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
+  const [chatRooms, setChatRooms] = useState<ChatRoomUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // TODO: API 연동 - 채팅방 목록 가져오기
+  // 채팅방 목록 가져오기
   useEffect(() => {
-    // 임시 더미 데이터
-    const dummyChatRooms: ChatRoom[] = [
-      {
-        chat_room_user_id: 1,
-        unread_count: 2,
-        last_read_at: null,
-        joined_at: "2024-01-15T10:00:00Z",
-        chat_room: {
-          chat_room_id: 1,
-          room_type: "direct",
-          room_name: null,
-          last_message_text: "내일 오전 6시에 한강에서 만날까요?",
-          last_message_at: "2024-01-20T15:30:00Z",
-          created_at: "2024-01-15T10:00:00Z",
-          updated_at: "2024-01-20T15:30:00Z",
-          chat_room_users: [
-            {
-              user: {
-                user_id: 2,
-                name: "김민준",
-                profile_image: "https://images.unsplash.com/photo-1566753323558-f4e0952af115?w=400&h=400&fit=crop&crop=face"
-              }
-            }
-          ]
-        }
-      },
-      {
-        chat_room_user_id: 2,
-        unread_count: 0,
-        last_read_at: "2024-01-20T14:00:00Z",
-        joined_at: "2024-01-18T09:00:00Z",
-        chat_room: {
-          chat_room_id: 2,
-          room_type: "direct",
-          room_name: null,
-          last_message_text: "오늘 러닝 정말 좋았어요!",
-          last_message_at: "2024-01-20T14:00:00Z",
-          created_at: "2024-01-18T09:00:00Z",
-          updated_at: "2024-01-20T14:00:00Z",
-          chat_room_users: [
-            {
-              user: {
-                user_id: 3,
-                name: "박지연",
-                profile_image: "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=400&h=400&fit=crop&crop=face"
-              }
-            }
-          ]
-        }
-      },
-      {
-        chat_room_user_id: 3,
-        unread_count: 5,
-        last_read_at: "2024-01-19T20:00:00Z",
-        joined_at: "2024-01-10T11:00:00Z",
-        chat_room: {
-          chat_room_id: 3,
-          room_type: "direct",
-          room_name: null,
-          last_message_text: "주말에 남산 코스 어때요?",
-          last_message_at: "2024-01-20T16:45:00Z",
-          created_at: "2024-01-10T11:00:00Z",
-          updated_at: "2024-01-20T16:45:00Z",
-          chat_room_users: [
-            {
-              user: {
-                user_id: 4,
-                name: "이태혁",
-                profile_image: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face"
-              }
-            }
-          ]
-        }
-      }
-    ];
-
-    setTimeout(() => {
-      setChatRooms(dummyChatRooms);
-      setLoading(false);
-    }, 500);
+    loadChatRooms();
   }, []);
 
-  const getOtherUser = (chatRoom: ChatRoom) => {
+  const loadChatRooms = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const rooms = await getChatRooms();
+      setChatRooms(rooms);
+    } catch (err: any) {
+      console.error('채팅방 목록 로드 실패:', err);
+      setError(err.message || '채팅방 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getOtherUser = (chatRoom: ChatRoomUser) => {
     // 1:1 채팅에서 상대방 정보 가져오기
     return chatRoom.chat_room.chat_room_users[0]?.user;
   };
@@ -182,9 +96,19 @@ export function ChatPage({ onChatRoomClick }: ChatPageProps) {
 
         {/* Chat List */}
         <div className="space-y-2">
-          {loading ? (
+          {error ? (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+              <p className="text-red-600 mb-4">{error}</p>
+              <button
+                onClick={loadChatRooms}
+                className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
+              >
+                다시 시도
+              </button>
+            </div>
+          ) : loading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1e3a8a] mx-auto"></div>
+              <Loader2 className="animate-spin mx-auto" size={48} />
               <p className="mt-4 text-gray-600">채팅 목록을 불러오는 중...</p>
             </div>
           ) : filteredChatRooms.length === 0 ? (

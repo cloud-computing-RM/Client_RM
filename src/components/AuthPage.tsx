@@ -2,15 +2,12 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Textarea } from "./ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { Mail, Lock, User, MapPin, ArrowLeft } from "lucide-react";
+import { Mail, Lock, User, MapPin, ArrowLeft, Loader2 } from "lucide-react";
 import { login, register } from "../services/authService";
-import { tokenStorage } from "../services/apiClient";
-import type { User as UserType } from "../types";
 
 interface AuthPageProps {
-  onLogin: (userData: UserType) => void;
+  onLogin: (userData: any) => void;
   onBack: () => void;
 }
 
@@ -27,48 +24,44 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
     confirmPassword: "",
     age: "",
     location: "",
-    bio: "",
   });
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [signupLoading, setSignupLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
 
-    // 유효성 검사
+    // 간단한 유효성 검사
     if (!loginForm.email || !loginForm.password) {
       setError("이메일과 비밀번호를 입력해주세요.");
       return;
     }
 
-    setIsLoading(true);
-
     try {
-      const response = await login({
+      setLoginLoading(true);
+      setError(null);
+
+      const authData = await login({
         email: loginForm.email,
         password: loginForm.password,
       });
 
-      // 토큰 저장
-      tokenStorage.set(response.token);
+      console.log('로그인 성공:', authData);
 
-      // 사용자 정보 저장
-      localStorage.setItem('runmate_user', JSON.stringify(response.user));
-      localStorage.setItem('runmate_auth', 'true');
-
-      onLogin(response.user);
+      // 로그인 성공
+      onLogin(authData.user);
     } catch (err: any) {
-      setError(err.message || "로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.");
+      console.error('로그인 실패:', err);
+      setError(err.message || "로그인에 실패했습니다.");
     } finally {
-      setIsLoading(false);
+      setLoginLoading(false);
     }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
 
     // 유효성 검사
     if (!signupForm.name || !signupForm.email || !signupForm.password || !signupForm.age || !signupForm.location) {
@@ -86,30 +79,27 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
       return;
     }
 
-    setIsLoading(true);
-
     try {
-      const response = await register({
-        name: signupForm.name,
+      setSignupLoading(true);
+      setError(null);
+
+      const authData = await register({
         email: signupForm.email,
         password: signupForm.password,
+        name: signupForm.name,
         age: parseInt(signupForm.age),
         location: signupForm.location,
-        bio: signupForm.bio,
       });
 
-      // 토큰 저장
-      tokenStorage.set(response.token);
+      console.log('회원가입 성공:', authData);
 
-      // 사용자 정보 저장
-      localStorage.setItem('runmate_user', JSON.stringify(response.user));
-      localStorage.setItem('runmate_auth', 'true');
-
-      onLogin(response.user);
+      // 회원가입 성공
+      onLogin(authData.user);
     } catch (err: any) {
-      setError(err.message || "회원가입에 실패했습니다. 다시 시도해주세요.");
+      console.error('회원가입 실패:', err);
+      setError(err.message || "회원가입에 실패했습니다.");
     } finally {
-      setIsLoading(false);
+      setSignupLoading(false);
     }
   };
 
@@ -132,13 +122,6 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
           <h1 className="text-4xl mb-2">RunMate</h1>
           <p className="text-gray-600">함께 뛰는 즐거움</p>
         </div>
-
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
 
         {/* Auth Card */}
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
@@ -181,12 +164,20 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                   </div>
                 </div>
 
+                {/* 에러 메시지 */}
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
+                    {error}
+                  </div>
+                )}
+
                 <Button
                   type="submit"
                   className="w-full bg-black hover:bg-gray-800"
-                  disabled={isLoading}
+                  disabled={loginLoading}
                 >
-                  {isLoading ? "로그인 중..." : "로그인"}
+                  {loginLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {loginLoading ? "로그인 중..." : "로그인"}
                 </Button>
 
                 <div className="text-center">
@@ -288,23 +279,20 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="signup-bio">자기소개</Label>
-                  <Textarea
-                    id="signup-bio"
-                    placeholder="간단한 자기소개를 입력해주세요..."
-                    value={signupForm.bio}
-                    onChange={(e) => setSignupForm({ ...signupForm, bio: e.target.value })}
-                    rows={3}
-                  />
-                </div>
+                {/* 에러 메시지 */}
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
+                    {error}
+                  </div>
+                )}
 
                 <Button
                   type="submit"
                   className="w-full bg-black hover:bg-gray-800"
-                  disabled={isLoading}
+                  disabled={signupLoading}
                 >
-                  {isLoading ? "가입 중..." : "회원가입"}
+                  {signupLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {signupLoading ? "가입 중..." : "회원가입"}
                 </Button>
 
                 <p className="text-xs text-gray-500 text-center">

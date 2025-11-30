@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { User, Settings, LogOut, Home, Compass, MessageSquare, Activity } from "lucide-react";
+import { User, Settings, LogOut, Home, Compass, MessageSquare, Activity, MessagesSquare } from "lucide-react";
 
 interface WebHeaderProps {
   activeTab: string;
@@ -22,6 +22,7 @@ export function WebHeader({ activeTab, onTabChange, user, onLogout }: WebHeaderP
     { id: 'home', label: '홈', icon: Home },
     { id: 'explore', label: '둘러보기', icon: Compass },
     { id: 'board', label: '게시판', icon: MessageSquare },
+    { id: 'chat', label: '메시지', icon: MessagesSquare },
     { id: 'records', label: '기록', icon: Activity },
   ];
 

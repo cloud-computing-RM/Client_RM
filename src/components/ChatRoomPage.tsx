@@ -1,29 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { ArrowLeft, Send, Image as ImageIcon, Smile } from "lucide-react";
+import { ArrowLeft, Send, Image as ImageIcon, Smile, Loader2 } from "lucide-react";
+import { getChatMessages, type Message } from "../services/chatService";
+import { useWebSocket, type WebSocketMessage } from "../hooks/useWebSocket";
 
 interface ChatRoomPageProps {
   chatRoomId: number;
   onBack: () => void;
-}
-
-interface Message {
-  message_id: number;
-  chat_room_id: number;
-  sender_id: number;
-  message_text: string;
-  message_type: "text" | "image" | "system";
-  is_read: boolean;
-  read_at: string | null;
-  created_at: string;
-  updated_at: string;
-  sender: {
-    user_id: number;
-    name: string;
-    profile_image: string | null;
-  };
 }
 
 interface ChatRoomInfo {
@@ -42,113 +27,91 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
   const [newMessage, setNewMessage] = useState("");
   const [chatRoomInfo, setChatRoomInfo] = useState<ChatRoomInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const currentUserId = 1; // TODO: 실제 로그인한 사용자 ID로 변경
 
-  // TODO: API 연동 - 채팅방 정보 및 메시지 가져오기
-  useEffect(() => {
-    // 임시 더미 데이터
-    const dummyChatRoomInfo: ChatRoomInfo = {
-      chat_room_id: chatRoomId,
-      room_type: "direct",
-      room_name: null,
-      other_user: {
-        user_id: 2,
-        name: "김민준",
-        profile_image: "https://images.unsplash.com/photo-1566753323558-f4e0952af115?w=400&h=400&fit=crop&crop=face"
+  // 현재 로그인한 사용자 ID 가져오기
+  const currentUser = JSON.parse(localStorage.getItem('runmate_user') || 'null');
+  const currentUserId = currentUser?.user_id || 1;
+
+  // WebSocket 메시지 수신 핸들러
+  const handleWebSocketMessage = useCallback((wsMessage: WebSocketMessage) => {
+    console.log('WebSocket 메시지 수신:', wsMessage);
+
+    // 현재 채팅방의 메시지만 처리
+    if (wsMessage.type === 'message' && wsMessage.message) {
+      if (wsMessage.message.chat_room_id === chatRoomId) {
+        setMessages(prev => {
+          // 중복 방지: 같은 message_id가 이미 있으면 추가하지 않음
+          if (prev.some(m => m.message_id === wsMessage.message!.message_id)) {
+            return prev;
+          }
+          return [...prev, wsMessage.message!];
+        });
       }
-    };
-
-    const dummyMessages: Message[] = [
-      {
-        message_id: 1,
-        chat_room_id: chatRoomId,
-        sender_id: 2,
-        message_text: "안녕하세요! 프로필 봤는데 러닝 스타일이 잘 맞을 것 같아요.",
-        message_type: "text",
-        is_read: true,
-        read_at: "2024-01-20T10:30:00Z",
-        created_at: "2024-01-20T10:00:00Z",
-        updated_at: "2024-01-20T10:00:00Z",
-        sender: {
-          user_id: 2,
-          name: "김민준",
-          profile_image: "https://images.unsplash.com/photo-1566753323558-f4e0952af115?w=400&h=400&fit=crop&crop=face"
-        }
-      },
-      {
-        message_id: 2,
-        chat_room_id: chatRoomId,
-        sender_id: 1,
-        message_text: "네! 저도 프로필 봤어요. 페이스가 비슷하네요 😊",
-        message_type: "text",
-        is_read: true,
-        read_at: "2024-01-20T11:00:00Z",
-        created_at: "2024-01-20T10:30:00Z",
-        updated_at: "2024-01-20T10:30:00Z",
-        sender: {
-          user_id: 1,
-          name: "나",
-          profile_image: null
-        }
-      },
-      {
-        message_id: 3,
-        chat_room_id: chatRoomId,
-        sender_id: 2,
-        message_text: "주로 어디서 뛰시나요?",
-        message_type: "text",
-        is_read: true,
-        read_at: "2024-01-20T11:15:00Z",
-        created_at: "2024-01-20T11:00:00Z",
-        updated_at: "2024-01-20T11:00:00Z",
-        sender: {
-          user_id: 2,
-          name: "김민준",
-          profile_image: "https://images.unsplash.com/photo-1566753323558-f4e0952af115?w=400&h=400&fit=crop&crop=face"
-        }
-      },
-      {
-        message_id: 4,
-        chat_room_id: chatRoomId,
-        sender_id: 1,
-        message_text: "한강공원에서 주로 뛰어요. 저녁 시간대에요!",
-        message_type: "text",
-        is_read: true,
-        read_at: "2024-01-20T14:00:00Z",
-        created_at: "2024-01-20T11:15:00Z",
-        updated_at: "2024-01-20T11:15:00Z",
-        sender: {
-          user_id: 1,
-          name: "나",
-          profile_image: null
-        }
-      },
-      {
-        message_id: 5,
-        chat_room_id: chatRoomId,
-        sender_id: 2,
-        message_text: "오 저도 한강 자주 가요! 내일 오전 6시에 한강에서 만날까요?",
-        message_type: "text",
-        is_read: false,
-        read_at: null,
-        created_at: "2024-01-20T15:30:00Z",
-        updated_at: "2024-01-20T15:30:00Z",
-        sender: {
-          user_id: 2,
-          name: "김민준",
-          profile_image: "https://images.unsplash.com/photo-1566753323558-f4e0952af115?w=400&h=400&fit=crop&crop=face"
-        }
-      }
-    ];
-
-    setTimeout(() => {
-      setChatRoomInfo(dummyChatRoomInfo);
-      setMessages(dummyMessages);
-      setLoading(false);
-    }, 500);
+    }
   }, [chatRoomId]);
+
+  // WebSocket 연결
+  const { sendMessage: sendWebSocketMessage, isConnected } = useWebSocket({
+    onMessage: handleWebSocketMessage,
+    onConnect: () => console.log('WebSocket 연결됨'),
+    onDisconnect: () => console.log('WebSocket 연결 해제됨'),
+    autoConnect: true
+  });
+
+  // 채팅방 정보 및 메시지 히스토리 로드
+  useEffect(() => {
+    loadChatRoomData();
+  }, [chatRoomId]);
+
+  const loadChatRoomData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // 메시지 히스토리 가져오기
+      const messageHistory = await getChatMessages(chatRoomId);
+      setMessages(messageHistory);
+
+      // 채팅방 정보 설정 (메시지에서 추출)
+      if (messageHistory.length > 0) {
+        const firstMessage = messageHistory[0];
+        const otherUser = firstMessage.sender_id === currentUserId
+          ? null // 상대방 정보가 필요하면 API에서 가져와야 함
+          : firstMessage.sender;
+
+        setChatRoomInfo({
+          chat_room_id: chatRoomId,
+          room_type: "direct",
+          room_name: null,
+          other_user: otherUser || {
+            user_id: 0,
+            name: "Unknown",
+            profile_image: null
+          }
+        });
+      } else {
+        // 메시지가 없을 경우 기본값 설정
+        setChatRoomInfo({
+          chat_room_id: chatRoomId,
+          room_type: "direct",
+          room_name: null,
+          other_user: {
+            user_id: 0,
+            name: "채팅 상대",
+            profile_image: null
+          }
+        });
+      }
+    } catch (err: any) {
+      console.error('채팅방 데이터 로드 실패:', err);
+      setError(err.message || '채팅방을 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 메시지가 추가되면 스크롤을 맨 아래로
   useEffect(() => {
@@ -160,33 +123,45 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || sending) return;
+    if (!newMessage.trim() || sending || !isConnected) return;
 
     setSending(true);
 
-    // TODO: API 연동 - 메시지 전송
-    const newMsg: Message = {
-      message_id: Date.now(),
-      chat_room_id: chatRoomId,
-      sender_id: currentUserId,
-      message_text: newMessage,
-      message_type: "text",
-      is_read: false,
-      read_at: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      sender: {
-        user_id: currentUserId,
-        name: "나",
-        profile_image: null
-      }
-    };
+    try {
+      // WebSocket을 통해 메시지 전송
+      sendWebSocketMessage({
+        type: 'message',
+        chat_room_id: chatRoomId,
+        message_text: newMessage,
+        message_type: 'text'
+      });
 
-    setTimeout(() => {
-      setMessages(prev => [...prev, newMsg]);
+      // 임시로 로컬에 추가 (WebSocket 응답으로 다시 받을 것임)
+      const tempMsg: Message = {
+        message_id: Date.now(), // 임시 ID
+        chat_room_id: chatRoomId,
+        sender_id: currentUserId,
+        message_text: newMessage,
+        message_type: "text",
+        is_read: false,
+        read_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sender: {
+          user_id: currentUserId,
+          name: currentUser?.name || "나",
+          profile_image: currentUser?.profile_image || null
+        }
+      };
+
+      setMessages(prev => [...prev, tempMsg]);
       setNewMessage("");
+    } catch (error: any) {
+      console.error('메시지 전송 실패:', error);
+      alert(error.message || '메시지 전송에 실패했습니다.');
+    } finally {
       setSending(false);
-    }, 300);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -235,8 +210,24 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1e3a8a] mx-auto"></div>
+          <Loader2 className="animate-spin mx-auto" size={48} />
           <p className="mt-4 text-gray-600">채팅방을 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <Button onClick={loadChatRoomData} className="mr-2">
+            다시 시도
+          </Button>
+          <Button onClick={onBack} variant="outline">
+            돌아가기
+          </Button>
         </div>
       </div>
     );
@@ -277,7 +268,9 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
 
           <div className="flex-1">
             <h2 className="font-medium">{chatRoomInfo.other_user.name}</h2>
-            <p className="text-xs text-gray-500">온라인</p>
+            <p className="text-xs text-gray-500">
+              {isConnected ? '온라인' : '연결 중...'}
+            </p>
           </div>
         </div>
       </div>
