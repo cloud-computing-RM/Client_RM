@@ -91,25 +91,26 @@ export async function updateLocation(location: LocationUpdate): Promise<User> {
 
 /**
  * GPS 기반 주변 러너 검색
- * GET /api/users/nearby?latitude={lat}&longitude={lng}&radius={radius}
+ * GET /api/users/nearby?distance={distance}
+ *
+ * 백엔드에서 인증된 사용자의 DB에 저장된 GPS 위치를 사용하여 주변 러너를 검색합니다.
  */
 export async function getNearbyUsers(
   latitude: number,
   longitude: number,
   radius?: number
 ): Promise<NearbyUser[]> {
-  const params = new URLSearchParams({
-    latitude: latitude.toString(),
-    longitude: longitude.toString(),
-  });
+  const params = new URLSearchParams();
 
   if (radius) {
-    params.append('radius', radius.toString());
+    params.append('distance', radius.toString());
   }
 
-  const response = await get<ApiResponse<NearbyUser[]>>(
-    `/api/users/nearby?${params.toString()}`
-  );
+  const url = params.toString()
+    ? `/api/users/nearby?${params.toString()}`
+    : '/api/users/nearby';
+
+  const response = await get<ApiResponse<NearbyUser[]>>(url);
 
   if (!response.success || !response.data) {
     throw new Error(response.message || '주변 러너 검색에 실패했습니다.');

@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Badge } from "./ui/badge";
-import { Heart, MapPin, Clock, Users, X, RotateCcw, Zap } from "lucide-react";
+import { Heart, MapPin, Clock, Users, X, RotateCcw, Zap, Loader2, Navigation } from "lucide-react";
 import { Button } from "./ui/button";
 import { sendLike } from "../services/likeService";
+import { getNearbyUsers, updateLocation } from "../services/userService";
+import type { NearbyUser } from "../types";
 
 export function ExplorePage() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -13,109 +15,89 @@ export function ExplorePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [matchNotification, setMatchNotification] = useState<string | null>(null);
+  const [nearbyUsers, setNearbyUsers] = useState<NearbyUser[]>([]);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const runningProfiles = [
-    {
-      id: 1,
-      name: "김민준",
-      age: 28,
-      location: "서울 강남구",
-      pace: "5:30/km",
-      distance: "주 3회, 5-10km",
-      bio: "새벽 러닝을 좋아하는 직장인입니다. 함께 뛸 분 환영해요!",
-      tags: ["새벽러닝", "강남", "초급자환영"],
-      image: "https://images.unsplash.com/photo-1566753323558-f4e0952af115?w=400&h=400&fit=crop&crop=face",
-    },
-    {
-      id: 2,
-      name: "박지연",
-      age: 25,
-      location: "서울 홍대",
-      pace: "6:00/km",
-      distance: "주 4회, 3-7km",
-      bio: "러닝 초보입니다. 천천히 함께 달리실 분 찾아요 🏃‍♀️",
-      tags: ["초보", "홍대", "재미있게"],
-      image: "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=400&h=400&fit=crop&crop=face",
-    },
-    {
-      id: 3,
-      name: "이태혁",
-      age: 32,
-      location: "서울 송파구",
-      pace: "4:45/km",
-      distance: "주 5회, 10-15km",
-      bio: "마라톤 준비 중입니다. 페이스 맞춰 뛸 분 구해요!",
-      tags: ["마라톤", "송파", "고급자"],
-      image: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face",
-    },
-    {
-      id: 4,
-      name: "최수진",
-      age: 27,
-      location: "서울 마포구",
-      pace: "5:45/km",
-      distance: "주 3회, 5km",
-      bio: "한강 야경 보며 러닝하는 걸 좋아해요 🌃",
-      tags: ["야간러닝", "한강", "여의도"],
-      image: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=face",
-    },
-    {
-      id: 5,
-      name: "정현우",
-      age: 30,
-      location: "서울 용산구",
-      pace: "5:00/km",
-      distance: "주 4회, 7-12km",
-      bio: "주말 장거리 러닝 함께하실 분 찾습니다!",
-      tags: ["주말러닝", "장거리", "용산"],
-      image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
-    },
-    {
-      id: 6,
-      name: "박진수",
-      age: 29,
-      location: "서울 서초구",
-      pace: "5:15/km",
-      distance: "주 5회, 8-12km",
-      bio: "트레일 러닝 좋아합니다. 산과 자연 속에서 함께 뛰어요! ⛰️",
-      tags: ["트레일러닝", "서초", "자연"],
-      image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face",
-    },
-    {
-      id: 7,
-      name: "이찬빈",
-      age: 26,
-      location: "서울 성동구",
-      pace: "5:50/km",
-      distance: "주 3회, 4-6km",
-      bio: "음악 들으며 가볍게 뛰는 걸 좋아합니다 🎵 성수동 근처 러너 환영!",
-      tags: ["음악러닝", "성수", "중급자"],
-      image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face",
-    },
-    {
-      id: 8,
-      name: "박규민",
-      age: 31,
-      location: "서울 영등포구",
-      pace: "4:50/km",
-      distance: "주 6회, 10-20km",
-      bio: "하프/풀 마라톤 준비 중입니다. 고급 러너와 페이스 트레이닝 원합니다!",
-      tags: ["풀마라톤", "고급자", "영등포"],
-      image: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&h=400&fit=crop&crop=face",
-    },
-    {
-      id: 9,
-      name: "박제성",
-      age: 24,
-      location: "서울 광진구",
-      pace: "6:15/km",
-      distance: "주 2회, 3-5km",
-      bio: "러닝 시작한지 얼마 안 됐어요. 초보 러너들과 함께 성장하고 싶습니다! 💪",
-      tags: ["초보", "광진", "건대"],
-      image: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=400&h=400&fit=crop&crop=face",
-    },
-  ];
+  // GPS 위치 가져오기 및 주변 러너 로드
+  useEffect(() => {
+    requestLocationAndLoadUsers();
+  }, []);
+
+  const requestLocationAndLoadUsers = async () => {
+    setIsLoadingLocation(true);
+    setLocationError(null);
+
+    // GPS 권한 체크
+    if (!navigator.geolocation) {
+      setLocationError('GPS를 지원하지 않는 브라우저입니다.');
+      setIsLoadingLocation(false);
+      return;
+    }
+
+    // GPS 위치 가져오기
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation({ latitude, longitude });
+
+        try {
+          // 서버에 위치 업데이트
+          await updateLocation({ latitude, longitude });
+          console.log('위치 업데이트 성공:', { latitude, longitude });
+
+          // 주변 러너 검색
+          await loadNearbyUsers(latitude, longitude);
+        } catch (error: any) {
+          console.error('위치 업데이트 또는 주변 러너 로드 실패:', error);
+          setLocationError(error.message || '주변 러너를 불러오는데 실패했습니다.');
+        } finally {
+          setIsLoadingLocation(false);
+        }
+      },
+      (error) => {
+        console.error('GPS 권한 오류:', error);
+        let errorMessage = 'GPS 위치를 가져올 수 없습니다.';
+
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'GPS 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'GPS 위치 정보를 사용할 수 없습니다.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'GPS 위치 요청 시간이 초과되었습니다.';
+            break;
+        }
+
+        setLocationError(errorMessage);
+        setIsLoadingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
+
+  const loadNearbyUsers = async (latitude: number, longitude: number, radius?: number) => {
+    setIsLoadingUsers(true);
+    try {
+      const users = await getNearbyUsers(latitude, longitude, radius);
+      setNearbyUsers(users);
+      console.log(`주변 러너 ${users.length}명 로드 완료`);
+    } catch (error: any) {
+      console.error('주변 러너 로드 실패:', error);
+      throw error;
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
 
   // localStorage에서 좋아요한 프로필 불러오기
   useEffect(() => {
@@ -124,10 +106,10 @@ export function ExplorePage() {
       try {
         const likedIds = JSON.parse(savedLikes);
         setLikedProfiles(likedIds);
-        
+
         // 이미 좋아요한 프로필은 건너뛰기
         let nextIndex = 0;
-        while (nextIndex < runningProfiles.length && likedIds.includes(runningProfiles[nextIndex].id)) {
+        while (nextIndex < nearbyUsers.length && likedIds.includes(nearbyUsers[nextIndex].user_id)) {
           nextIndex++;
         }
         setCurrentIndex(nextIndex);
@@ -135,9 +117,9 @@ export function ExplorePage() {
         console.error('Error loading liked profiles:', error);
       }
     }
-  }, []);
+  }, [nearbyUsers]);
 
-  const currentProfile = runningProfiles[currentIndex];
+  const currentProfile = nearbyUsers[currentIndex];
 
   const handleLike = async () => {
     if (!currentProfile || isLiking) return;
@@ -146,7 +128,7 @@ export function ExplorePage() {
       setIsLiking(true);
 
       // API로 좋아요 보내기
-      const result = await sendLike(currentProfile.id);
+      const result = await sendLike(currentProfile.user_id);
 
       // 매칭 알림
       if (result.isMatch) {
@@ -155,13 +137,13 @@ export function ExplorePage() {
       }
 
       // localStorage에도 저장 (백업 및 오프라인 지원)
-      const newLikedProfiles = [...likedProfiles, currentProfile.id];
+      const newLikedProfiles = [...likedProfiles, currentProfile.user_id];
       setLikedProfiles(newLikedProfiles);
 
       try {
         localStorage.setItem('runmate_liked_profiles', JSON.stringify(newLikedProfiles));
         const likedProfilesData = JSON.parse(localStorage.getItem('runmate_liked_profiles_data') || '[]');
-        if (!likedProfilesData.find((p: any) => p.id === currentProfile.id)) {
+        if (!likedProfilesData.find((p: any) => p.user_id === currentProfile.user_id)) {
           likedProfilesData.push(currentProfile);
           localStorage.setItem('runmate_liked_profiles_data', JSON.stringify(likedProfilesData));
         }
@@ -259,22 +241,86 @@ export function ExplorePage() {
     }
   };
 
-  if (currentIndex >= runningProfiles.length) {
+  // 로딩 상태
+  if (isLoadingLocation || isLoadingUsers) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center p-8">
+          <Loader2 className="w-16 h-16 animate-spin text-[#1e3a8a] mx-auto mb-6" />
+          <h2 className="text-3xl mb-3">
+            {isLoadingLocation ? 'GPS 위치 확인 중...' : '주변 러너 검색 중...'}
+          </h2>
+          <p className="text-gray-600">
+            {isLoadingLocation
+              ? '현재 위치를 확인하고 있습니다.'
+              : '가까운 러닝 메이트를 찾고 있습니다.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 에러 상태
+  if (locationError) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center p-8">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Navigation size={40} className="text-red-500" />
+          </div>
+          <h2 className="text-3xl mb-3">위치 접근 오류</h2>
+          <p className="text-gray-600 mb-8">{locationError}</p>
+          <Button
+            onClick={requestLocationAndLoadUsers}
+            className="bg-[#1e3a8a] hover:bg-[#1e40af] text-white"
+          >
+            <RotateCcw size={18} className="mr-2" />
+            다시 시도
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // 주변에 러너가 없거나 모든 메이트 확인 완료
+  if (nearbyUsers.length === 0 || currentIndex >= nearbyUsers.length) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="max-w-md mx-auto text-center p-8">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Heart size={40} className="text-gray-400" />
+            {nearbyUsers.length === 0 ? (
+              <Users size={40} className="text-gray-400" />
+            ) : (
+              <Heart size={40} className="text-gray-400" />
+            )}
           </div>
-          <h2 className="text-3xl mb-3">모든 메이트를 확인했어요!</h2>
-          <p className="text-gray-600 mb-8">새로운 러닝 메이트가 곧 추가될 예정입니다.</p>
-          <Button 
-            onClick={handleReset}
-            className="bg-black hover:bg-gray-800 text-white"
-          >
-            <RotateCcw size={18} className="mr-2" />
-            처음부터 다시 보기
-          </Button>
+          <h2 className="text-3xl mb-3">
+            {nearbyUsers.length === 0 ? '주변에 러너가 없습니다' : '모든 메이트를 확인했어요!'}
+          </h2>
+          <p className="text-gray-600 mb-8">
+            {nearbyUsers.length === 0
+              ? '현재 위치 주변에 러닝 메이트가 없습니다. 위치를 새로고침하거나 나중에 다시 시도해보세요.'
+              : '새로운 러닝 메이트가 곧 추가될 예정입니다.'}
+          </p>
+          <div className="flex gap-3 justify-center">
+            {nearbyUsers.length > 0 && (
+              <Button
+                onClick={handleReset}
+                variant="outline"
+                className="border-gray-300"
+              >
+                <RotateCcw size={18} className="mr-2" />
+                처음부터 다시 보기
+              </Button>
+            )}
+            <Button
+              onClick={requestLocationAndLoadUsers}
+              className="bg-[#1e3a8a] hover:bg-[#1e40af] text-white"
+            >
+              <Navigation size={18} className="mr-2" />
+              위치 새로고침
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -318,8 +364,8 @@ export function ExplorePage() {
           <div className="relative" style={{ height: '600px' }}>
             <div className="relative w-full h-full max-w-lg mx-auto">
               {/* Next Card Preview (더 뒤에) */}
-              {currentIndex + 2 < runningProfiles.length && (
-                <div 
+              {currentIndex + 2 < nearbyUsers.length && (
+                <div
                   className="absolute inset-0 bg-white rounded-3xl shadow-sm border border-gray-100"
                   style={{
                     transform: 'scale(0.90) translateY(20px)',
@@ -330,8 +376,8 @@ export function ExplorePage() {
               )}
 
               {/* Next Card Preview */}
-              {currentIndex + 1 < runningProfiles.length && (
-                <div 
+              {currentIndex + 1 < nearbyUsers.length && (
+                <div
                   className="absolute inset-0 bg-white rounded-3xl shadow-md border border-gray-100"
                   style={{
                     transform: 'scale(0.95) translateY(10px)',
@@ -340,8 +386,8 @@ export function ExplorePage() {
                   }}
                 >
                   <ImageWithFallback
-                    src={runningProfiles[currentIndex + 1].image}
-                    alt={runningProfiles[currentIndex + 1].name}
+                    src={nearbyUsers[currentIndex + 1].profile_image || ''}
+                    alt={nearbyUsers[currentIndex + 1].name}
                     className="w-full h-2/3 object-cover rounded-t-3xl"
                   />
                 </div>
@@ -369,7 +415,7 @@ export function ExplorePage() {
                   {/* Image */}
                   <div className="relative h-2/3">
                     <ImageWithFallback
-                      src={currentProfile.image}
+                      src={currentProfile.profile_image || ''}
                       alt={currentProfile.name}
                       className="w-full h-full object-cover"
                     />
@@ -411,30 +457,54 @@ export function ExplorePage() {
                           <Zap size={14} className="mr-1" />
                           페이스
                         </div>
-                        <div className="text-lg">{currentProfile.pace}</div>
+                        <div className="text-lg">
+                          {currentProfile.preferred_pace_min && currentProfile.preferred_pace_max
+                            ? `${currentProfile.preferred_pace_min}:00-${currentProfile.preferred_pace_max}:00/km`
+                            : '미설정'}
+                        </div>
                       </div>
                       <div className="bg-gray-50 rounded-xl p-3">
                         <div className="flex items-center text-gray-500 text-xs mb-1">
                           <Users size={14} className="mr-1" />
-                          활동량
+                          거리
                         </div>
-                        <div className="text-sm">{currentProfile.distance}</div>
+                        <div className="text-sm">
+                          {currentProfile.preferred_distance_min && currentProfile.preferred_distance_max
+                            ? `${currentProfile.preferred_distance_min}-${currentProfile.preferred_distance_max}km`
+                            : '미설정'}
+                        </div>
                       </div>
                     </div>
-                    
-                    <p className="text-gray-700 mb-4 leading-relaxed">{currentProfile.bio}</p>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      {currentProfile.tags.map((tag, index) => (
-                        <Badge 
-                          key={index} 
-                          variant="secondary"
-                          className="bg-gray-100 text-gray-700 border-0"
-                        >
-                          #{tag}
-                        </Badge>
-                      ))}
-                    </div>
+
+                    {currentProfile.distance && (
+                      <div className="bg-blue-50 rounded-xl p-3 mb-4">
+                        <div className="flex items-center text-blue-700 text-xs mb-1">
+                          <MapPin size={14} className="mr-1" />
+                          거리
+                        </div>
+                        <div className="text-sm text-blue-900">
+                          {currentProfile.distance.toFixed(1)}km 떨어진 위치
+                        </div>
+                      </div>
+                    )}
+
+                    {currentProfile.bio && (
+                      <p className="text-gray-700 mb-4 leading-relaxed">{currentProfile.bio}</p>
+                    )}
+
+                    {currentProfile.tags && currentProfile.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {currentProfile.tags.map((tag) => (
+                          <Badge
+                            key={tag.tag_id}
+                            variant="secondary"
+                            className="bg-gray-100 text-gray-700 border-0"
+                          >
+                            #{tag.tag_name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -488,12 +558,12 @@ export function ExplorePage() {
             {/* Progress */}
             <div className="text-center">
               <p className="text-sm text-gray-500">
-                {currentIndex + 1} / {runningProfiles.length}
+                {currentIndex + 1} / {nearbyUsers.length}
               </p>
               <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
-                <div 
+                <div
                   className="bg-black h-1.5 rounded-full transition-all duration-300"
-                  style={{ width: `${((currentIndex + 1) / runningProfiles.length) * 100}%` }}
+                  style={{ width: `${((currentIndex + 1) / nearbyUsers.length) * 100}%` }}
                 />
               </div>
             </div>
