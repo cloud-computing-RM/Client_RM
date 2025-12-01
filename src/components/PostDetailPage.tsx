@@ -38,6 +38,10 @@ export function PostDetailPage({ postId, onBack }: PostDetailPageProps) {
   const [dragOffset, setDragOffset] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // 대댓글 관련 상태
+  const [replyingTo, setReplyingTo] = useState<number | null>(null);
+  const [replyContent, setReplyContent] = useState("");
+
   // 현재 로그인한 사용자 정보
   const currentUser = JSON.parse(localStorage.getItem('runmate_user') || 'null');
 
@@ -99,16 +103,16 @@ export function PostDetailPage({ postId, onBack }: PostDetailPageProps) {
 
   // 게시글 및 댓글 데이터 로드
   useEffect(() => {
-    loadPostData();
+    loadPostData(true); // 첫 로드 시에만 조회수 증가
   }, [postId]);
 
-  const loadPostData = async () => {
+  const loadPostData = async (incrementView: boolean = false) => {
     try {
       setLoading(true);
       setError(null);
 
       const [postData, commentsData] = await Promise.all([
-        getPost(postId),
+        getPost(postId, incrementView), // incrementView 파라미터 전달
         getComments(postId),
       ]);
 
@@ -159,10 +163,9 @@ export function PostDetailPage({ postId, onBack }: PostDetailPageProps) {
       setComments([...comments, newComment]);
       setComment("");
 
-      // 댓글 수 업데이트
-      if (post) {
-        setPost({ ...post, comment_count: post.comment_count + 1 });
-      }
+      // 서버에서 최신 게시물 정보 다시 불러오기 (조회수 증가 없이)
+      const updatedPost = await getPost(postId, false);
+      setPost(updatedPost);
     } catch (err: any) {
       console.error('댓글 작성 에러:', err);
       alert(err.message || '댓글 작성에 실패했습니다.');
@@ -176,17 +179,61 @@ export function PostDetailPage({ postId, onBack }: PostDetailPageProps) {
     if (!window.confirm('정말 이 댓글을 삭제하시겠습니까?')) return;
 
     try {
-      await deleteComment(commentId);
-      setComments(comments.filter(c => c.comment_id !== commentId));
+      // 삭제할 댓글 찾기
+      const commentToDelete = comments.find(c => c.comment_id === commentId);
+      if (!commentToDelete) return;
 
-      // 댓글 수 업데이트
-      if (post) {
-        setPost({ ...post, comment_count: post.comment_count - 1 });
+      // 부모 댓글인 경우, 해당 댓글의 대댓글 개수도 계산
+      const isParentComment = !commentToDelete.parent_comment_id;
+
+      await deleteComment(commentId);
+
+      // 부모 댓글 삭제 시 대댓글도 함께 제거
+      if (isParentComment) {
+        setComments(comments.filter(c => c.comment_id !== commentId && c.parent_comment_id !== commentId));
+      } else {
+        setComments(comments.filter(c => c.comment_id !== commentId));
       }
+
+      // 서버에서 최신 게시물 정보 다시 불러오기 (조회수 증가 없이)
+      const updatedPost = await getPost(postId, false);
+      setPost(updatedPost);
     } catch (err: any) {
       console.error('댓글 삭제 에러:', err);
       alert(err.message || '댓글 삭제에 실패했습니다.');
     }
+  };
+
+  // 대댓글 작성
+  const handleReplySubmit = async (parentCommentId: number) => {
+    if (!replyContent.trim() || commentLoading) return;
+
+    try {
+      setCommentLoading(true);
+
+      const newReply = await createComment(postId, {
+        content: replyContent.trim(),
+        parent_comment_id: parentCommentId
+      });
+      setComments([...comments, newReply]);
+      setReplyContent("");
+      setReplyingTo(null);
+
+      // 서버에서 최신 게시물 정보 다시 불러오기 (조회수 증가 없이)
+      const updatedPost = await getPost(postId, false);
+      setPost(updatedPost);
+    } catch (err: any) {
+      console.error('답글 작성 에러:', err);
+      alert(err.message || '답글 작성에 실패했습니다.');
+    } finally {
+      setCommentLoading(false);
+    }
+  };
+
+  // 답글 취소
+  const handleReplyCancel = () => {
+    setReplyingTo(null);
+    setReplyContent("");
   };
 
   // 수정 모드 시작
@@ -492,29 +539,122 @@ export function PostDetailPage({ postId, onBack }: PostDetailPageProps) {
             {comments.length === 0 ? (
               <p className="text-center text-gray-500 py-8">첫 댓글을 작성해보세요!</p>
             ) : (
-              comments.map((comment) => (
-                <div key={comment.comment_id} className="flex gap-3">
-                  <Avatar className="w-8 h-8">
-                    <AvatarImage src={comment.user?.profile_image || ""} />
-                    <AvatarFallback className="text-sm">{comment.user?.name?.[0] || "?"}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium">{comment.user?.name || "익명"}</span>
-                      <span className="text-xs text-gray-500">{getRelativeTime(comment.created_at)}</span>
-                      {currentUser && comment.user_id === currentUser.user_id && (
-                        <button
-                          onClick={() => handleCommentDelete(comment.comment_id)}
-                          className="ml-auto text-xs text-red-500 hover:text-red-700"
-                        >
-                          삭제
-                        </button>
+              (() => {
+                // 댓글과 대댓글 구분
+                const parentComments = comments.filter(c => !c.parent_comment_id);
+                const childComments = comments.filter(c => c.parent_comment_id);
+
+                return parentComments.map((comment) => {
+                  // 이 댓글의 대댓글들 찾기
+                  const replies = childComments.filter(c => c.parent_comment_id === comment.comment_id);
+
+                  return (
+                    <div key={comment.comment_id}>
+                      {/* 부모 댓글 */}
+                      <div className="flex gap-3">
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage src={comment.user?.profile_image || ""} />
+                          <AvatarFallback className="text-sm">{comment.user?.name?.[0] || "?"}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium">{comment.user?.name || "익명"}</span>
+                            <span className="text-xs text-gray-500">{getRelativeTime(comment.created_at)}</span>
+                            {currentUser && comment.user_id === currentUser.user_id && (
+                              <button
+                                onClick={() => handleCommentDelete(comment.comment_id)}
+                                className="ml-auto text-xs text-red-500 hover:text-red-700"
+                              >
+                                삭제
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2">{comment.content}</p>
+
+                          {/* 답글 버튼 */}
+                          <button
+                            onClick={() => {
+                              setReplyingTo(comment.comment_id);
+                              setReplyContent("");
+                            }}
+                            className="text-xs text-gray-600 hover:text-black transition-colors"
+                          >
+                            답글
+                          </button>
+
+                          {/* 답글 입력창 */}
+                          {replyingTo === comment.comment_id && (
+                            <div className="mt-3 space-y-2">
+                              <Textarea
+                                placeholder={`${comment.user?.name || "익명"}님에게 답글을 입력하세요...`}
+                                value={replyContent}
+                                onChange={(e) => setReplyContent(e.target.value)}
+                                className="min-h-20"
+                                disabled={commentLoading}
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={() => handleReplySubmit(comment.comment_id)}
+                                  disabled={!replyContent.trim() || commentLoading}
+                                  size="sm"
+                                  className="bg-black hover:bg-gray-800 text-white"
+                                >
+                                  {commentLoading ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                      작성 중...
+                                    </>
+                                  ) : (
+                                    "답글 작성"
+                                  )}
+                                </Button>
+                                <Button
+                                  onClick={handleReplyCancel}
+                                  disabled={commentLoading}
+                                  size="sm"
+                                  variant="outline"
+                                >
+                                  취소
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 대댓글들 (들여쓰기) */}
+                      {replies.length > 0 && (
+                        <div className="ml-11 mt-4 space-y-3 border-l-4 border-blue-200 pl-4 bg-gray-50 py-3 rounded-r-lg">
+                          {replies.map((reply) => (
+                            <div key={reply.comment_id} className="flex gap-3">
+                              <Avatar className="w-7 h-7">
+                                <AvatarImage src={reply.user?.profile_image || ""} />
+                                <AvatarFallback className="text-xs bg-blue-100">{reply.user?.name?.[0] || "?"}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs text-blue-600">↳</span>
+                                  <span className="text-sm font-medium">{reply.user?.name || "익명"}</span>
+                                  <span className="text-xs text-gray-500">{getRelativeTime(reply.created_at)}</span>
+                                  {currentUser && reply.user_id === currentUser.user_id && (
+                                    <button
+                                      onClick={() => handleCommentDelete(reply.comment_id)}
+                                      className="ml-auto text-xs text-red-500 hover:text-red-700"
+                                    >
+                                      삭제
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-700">{reply.content}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    <p className="text-sm text-gray-700">{comment.content}</p>
-                  </div>
-                </div>
-              ))
+                  );
+                });
+              })()
             )}
           </div>
 

@@ -33,23 +33,32 @@ export interface Match {
  * 좋아요 보내기 (매칭 자동 감지)
  * POST /api/likes
  */
-export async function sendLike(receiverId: number): Promise<{ like: Like; isMatch: boolean }> {
+export async function sendLike(receiverId: number): Promise<{ like: Like; isMatch: boolean; message?: string }> {
   const response = await post<any>('/api/likes', { receiver_id: receiverId });
 
   console.log('좋아요 보내기 응답:', response);
 
-  // 다양한 응답 형식 처리
-  // 1. { success: true, data: { like: {...}, isMatch: boolean } }
+  // 백엔드 응답 형식: { success: true, message: string, data: { like_id, is_matched, chat_room_id } }
   if (response.success && response.data) {
-    return response.data;
+    return {
+      like: {
+        like_id: response.data.like_id,
+        sender_id: 0, // 현재 사용자
+        receiver_id: receiverId,
+        created_at: new Date().toISOString(),
+      } as Like,
+      isMatch: response.data.is_matched || false,
+      message: response.message, // "이미 좋아요를 보냈습니다" 등
+    };
   }
 
-  // 2. { like: {...}, isMatch: boolean }
+  // 다양한 응답 형식 처리 (하위 호환성)
+  // 1. { like: {...}, isMatch: boolean }
   if (response.like !== undefined && response.isMatch !== undefined) {
     return response;
   }
 
-  // 3. { data: { like: {...}, isMatch: boolean } }
+  // 2. { data: { like: {...}, isMatch: boolean } }
   if (response.data?.like && response.data?.isMatch !== undefined) {
     return response.data;
   }

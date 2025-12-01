@@ -55,9 +55,15 @@ export async function getPosts(query?: PostListQuery): Promise<PostListResponse>
 /**
  * 게시글 상세 조회
  * GET /api/posts/{id}
+ * @param postId 게시글 ID
+ * @param incrementView 조회수 증가 여부 (기본값: false)
  */
-export async function getPost(postId: number): Promise<Post> {
-  const response = await get<any>(`/api/posts/${postId}`);
+export async function getPost(postId: number, incrementView: boolean = false): Promise<Post> {
+  const url = incrementView
+    ? `/api/posts/${postId}?incrementView=true`
+    : `/api/posts/${postId}`;
+
+  const response = await get<any>(url);
 
   console.log('게시글 상세 조회 응답:', response);
 

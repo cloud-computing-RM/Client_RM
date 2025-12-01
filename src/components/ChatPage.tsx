@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Badge } from "./ui/badge";
 import { MessageSquare, Search, Loader2 } from "lucide-react";
 import { Input } from "./ui/input";
 import { getChatRooms, type ChatRoomUser } from "../services/chatService";
+import { useWebSocket, type WebSocketMessage } from "../hooks/useWebSocket";
 
 interface ChatPageProps {
   onChatRoomClick: (chatRoomId: number) => void;
@@ -15,9 +16,56 @@ export function ChatPage({ onChatRoomClick }: ChatPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // WebSocket 메시지 수신 핸들러
+  const handleWebSocketMessage = useCallback((wsMessage: WebSocketMessage) => {
+    console.log('ChatPage - WebSocket 메시지 수신:', wsMessage);
+
+    // 메시지 삭제 이벤트 처리
+    if (wsMessage.type === 'message_deleted' && wsMessage.data) {
+      const { chat_room_id, updated_last_message } = wsMessage.data;
+
+      // 마지막 메시지가 업데이트된 경우에만 처리
+      if (updated_last_message !== null) {
+        console.log('마지막 메시지 업데이트:', chat_room_id, updated_last_message);
+
+        setChatRooms(prev => prev.map(room => {
+          if (room.chat_room.chat_room_id === chat_room_id) {
+            return {
+              ...room,
+              chat_room: {
+                ...room.chat_room,
+                last_message_text: updated_last_message.last_message_text,
+                last_message_at: updated_last_message.last_message_at,
+              }
+            };
+          }
+          return room;
+        }));
+      }
+    }
+  }, []);
+
+  // WebSocket 연결
+  useWebSocket({
+    onMessage: handleWebSocketMessage,
+    autoConnect: true
+  });
+
   // 채팅방 목록 가져오기
   useEffect(() => {
     loadChatRooms();
+
+    // 좋아요 취소 시 채팅방 목록 새로고침
+    const handleChatRoomsChanged = () => {
+      console.log('채팅방 목록 변경 감지, 새로고침 중...');
+      loadChatRooms();
+    };
+
+    window.addEventListener('chatRoomsChanged', handleChatRoomsChanged);
+
+    return () => {
+      window.removeEventListener('chatRoomsChanged', handleChatRoomsChanged);
+    };
   }, []);
 
   const loadChatRooms = async () => {

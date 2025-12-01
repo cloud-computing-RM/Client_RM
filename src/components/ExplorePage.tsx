@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Badge } from "./ui/badge";
 import { Heart, MapPin, Clock, Users, X, RotateCcw, Zap, Loader2, Navigation } from "lucide-react";
 import { Button } from "./ui/button";
 import { sendLike } from "../services/likeService";
 import { getNearbyUsers, updateLocation } from "../services/userService";
+import { useWebSocket, type WebSocketMessage } from "../hooks/useWebSocket";
 import type { NearbyUser } from "../types";
 
 export function ExplorePage() {
@@ -15,12 +16,45 @@ export function ExplorePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [matchNotification, setMatchNotification] = useState<string | null>(null);
+  const [likeReceivedNotification, setLikeReceivedNotification] = useState<string | null>(null);
   const [nearbyUsers, setNearbyUsers] = useState<NearbyUser[]>([]);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // WebSocket 메시지 수신 핸들러
+  const handleWebSocketMessage = useCallback((wsMessage: WebSocketMessage) => {
+    console.log('ExplorePage - WebSocket 메시지 수신:', wsMessage);
+
+    // 좋아요 수신 알림
+    if (wsMessage.type === 'like_received' && wsMessage.like) {
+      const senderName = wsMessage.like.sender.name;
+      setLikeReceivedNotification(`${senderName}님이 관심을 보냈습니다! 💝`);
+      setTimeout(() => setLikeReceivedNotification(null), 5000);
+
+      // 좋아요 수신 사운드나 진동 추가 가능
+      console.log('좋아요 수신:', wsMessage.like);
+    }
+
+    // 매칭 알림
+    if (wsMessage.type === 'match' && wsMessage.match) {
+      const userName = wsMessage.match.user.name;
+      setMatchNotification(`${userName}님과 매칭되었습니다! 🎉`);
+      setTimeout(() => setMatchNotification(null), 5000);
+
+      console.log('매칭 성공:', wsMessage.match);
+    }
+  }, []);
+
+  // WebSocket 연결
+  const { isConnected } = useWebSocket({
+    onMessage: handleWebSocketMessage,
+    onConnect: () => console.log('ExplorePage - WebSocket 연결됨'),
+    onDisconnect: () => console.log('ExplorePage - WebSocket 연결 해제됨'),
+    autoConnect: true
+  });
 
   // GPS 위치 가져오기 및 주변 러너 로드
   useEffect(() => {
@@ -99,25 +133,6 @@ export function ExplorePage() {
     }
   };
 
-  // localStorage에서 좋아요한 프로필 불러오기
-  useEffect(() => {
-    const savedLikes = localStorage.getItem('runmate_liked_profiles');
-    if (savedLikes) {
-      try {
-        const likedIds = JSON.parse(savedLikes);
-        setLikedProfiles(likedIds);
-
-        // 이미 좋아요한 프로필은 건너뛰기
-        let nextIndex = 0;
-        while (nextIndex < nearbyUsers.length && likedIds.includes(nearbyUsers[nextIndex].user_id)) {
-          nextIndex++;
-        }
-        setCurrentIndex(nextIndex);
-      } catch (error) {
-        console.error('Error loading liked profiles:', error);
-      }
-    }
-  }, [nearbyUsers]);
 
   const currentProfile = nearbyUsers[currentIndex];
 
@@ -127,8 +142,17 @@ export function ExplorePage() {
     try {
       setIsLiking(true);
 
-      // API로 좋아요 보내기
+      // API로 좋아요 보내기 (백엔드에서 중복 체크)
       const result = await sendLike(currentProfile.user_id);
+
+      console.log('좋아요 보내기 결과:', result);
+
+      // "이미 좋아요를 보냈습니다" 메시지 체크
+      if (result.message && result.message.includes('이미 좋아요를 보냈습니다')) {
+        alert('이미 좋아요를 보낸 메이트입니다.');
+        nextProfile(); // 확인 누르면 다음 프로필로 이동
+        return;
+      }
 
       // 매칭 알림
       if (result.isMatch) {
@@ -136,25 +160,19 @@ export function ExplorePage() {
         setTimeout(() => setMatchNotification(null), 3000);
       }
 
-      // localStorage에도 저장 (백업 및 오프라인 지원)
-      const newLikedProfiles = [...likedProfiles, currentProfile.user_id];
-      setLikedProfiles(newLikedProfiles);
-
-      try {
-        localStorage.setItem('runmate_liked_profiles', JSON.stringify(newLikedProfiles));
-        const likedProfilesData = JSON.parse(localStorage.getItem('runmate_liked_profiles_data') || '[]');
-        if (!likedProfilesData.find((p: any) => p.user_id === currentProfile.user_id)) {
-          likedProfilesData.push(currentProfile);
-          localStorage.setItem('runmate_liked_profiles_data', JSON.stringify(likedProfilesData));
-        }
-      } catch (error) {
-        console.error('Error saving to localStorage:', error);
-      }
+      // ProfilePage에 알림
+      window.dispatchEvent(new Event('likedProfilesChanged'));
 
       nextProfile();
     } catch (error: any) {
       console.error('좋아요 보내기 실패:', error);
-      alert(error.message || '좋아요 보내기에 실패했습니다.');
+
+      // 에러 메시지 표시
+      if (error.message) {
+        alert(error.message);
+      } else {
+        alert('좋아요 보내기에 실패했습니다.');
+      }
     } finally {
       setIsLiking(false);
     }
@@ -228,15 +246,13 @@ export function ExplorePage() {
 
   // 초기화 핸들러
   const handleReset = () => {
-    const confirmed = window.confirm('모든 러닝 메이트를 처음부터 다시 볼까요? 관심있는 메이트 목록도 초기화됩니다.');
+    const confirmed = window.confirm('둘러보기를 처음부터 다시 볼까요? 관심있는 메이트 목록은 유지됩니다.');
     if (confirmed) {
       try {
-        localStorage.removeItem('runmate_liked_profiles');
-        localStorage.removeItem('runmate_liked_profiles_data');
-        setLikedProfiles([]);
+        // currentIndex만 리셋 (좋아요한 프로필 정보는 유지)
         setCurrentIndex(0);
       } catch (error) {
-        console.error('Error resetting profiles:', error);
+        console.error('Error resetting explore:', error);
       }
     }
   };
@@ -337,6 +353,16 @@ export function ExplorePage() {
           <div className="bg-green-500 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-2">
             <Heart size={20} fill="white" />
             <span className="font-medium">{matchNotification}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 좋아요 수신 알림 */}
+      {likeReceivedNotification && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-top duration-300">
+          <div className="bg-pink-500 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-2">
+            <Heart size={20} fill="white" />
+            <span className="font-medium">{likeReceivedNotification}</span>
           </div>
         </div>
       )}

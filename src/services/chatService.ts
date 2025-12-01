@@ -2,7 +2,7 @@
 // 채팅 관련 API 서비스
 // ===================================
 
-import { get, post, del } from './apiClient';
+import { get, post, del, uploadFile } from './apiClient';
 
 /**
  * 메시지 타입
@@ -102,6 +102,34 @@ export async function createChatRoom(data: CreateChatRoomRequest): Promise<ChatR
 }
 
 /**
+ * 특정 채팅방 상세 조회
+ * GET /api/chat/rooms/{chat_room_id}
+ */
+export async function getChatRoom(chatRoomId: number): Promise<ChatRoomUser> {
+  const response = await get<any>(`/api/chat/rooms/${chatRoomId}`);
+
+  console.log('채팅방 상세 조회 응답:', response);
+
+  // 다양한 응답 형식 처리
+  // 1. { success: true, data: {...} }
+  if (response.success && response.data) {
+    return response.data;
+  }
+
+  // 2. {...} (객체 직접 반환)
+  if (response.chat_room_user_id) {
+    return response;
+  }
+
+  // 3. { data: {...} }
+  if (response.data && response.data.chat_room_user_id) {
+    return response.data;
+  }
+
+  throw new Error(response.message || '채팅방 정보를 가져올 수 없습니다.');
+}
+
+/**
  * 내 채팅방 목록 조회
  * GET /api/chat/rooms
  */
@@ -139,22 +167,32 @@ export async function getChatMessages(chatRoomId: number): Promise<Message[]> {
   console.log('채팅 메시지 조회 응답:', response);
 
   // 다양한 응답 형식 처리
-  // 1. { success: true, data: [...] }
-  if (response.success && response.data) {
+  // 1. { success: true, data: { messages: [...] } }
+  if (response.success && response.data?.messages) {
+    return response.data.messages;
+  }
+
+  // 2. { success: true, data: [...] }
+  if (response.success && response.data && Array.isArray(response.data)) {
     return response.data;
   }
 
-  // 2. [...] (배열 직접 반환)
+  // 3. [...] (배열 직접 반환)
   if (Array.isArray(response)) {
     return response;
   }
 
-  // 3. { data: [...] }
+  // 4. { data: { messages: [...] } }
+  if (response.data?.messages && Array.isArray(response.data.messages)) {
+    return response.data.messages;
+  }
+
+  // 5. { data: [...] }
   if (response.data && Array.isArray(response.data)) {
     return response.data;
   }
 
-  // 4. { messages: [...] }
+  // 6. { messages: [...] }
   if (response.messages && Array.isArray(response.messages)) {
     return response.messages;
   }
@@ -210,4 +248,57 @@ export async function getUnreadCount(): Promise<number> {
   }
 
   throw new Error(response.message || '읽지 않은 메시지 개수를 가져올 수 없습니다.');
+}
+
+/**
+ * 메시지 삭제 (자신의 메시지만)
+ * DELETE /api/chat/messages/{message_id}
+ */
+export async function deleteMessage(messageId: number): Promise<void> {
+  const response = await del<any>(`/api/chat/messages/${messageId}`);
+
+  console.log('메시지 삭제 응답:', response);
+
+  // 성공 여부 확인
+  if (response.success === false) {
+    throw new Error(response.message || '메시지 삭제에 실패했습니다.');
+  }
+
+  // 응답이 없거나 success가 없으면 성공으로 간주
+}
+
+/**
+ * 채팅 이미지 업로드
+ * POST /api/chat/upload
+ */
+export async function uploadChatImage(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append('image', file);
+
+  const response = await uploadFile<any>('/api/chat/upload', formData);
+
+  console.log('채팅 이미지 업로드 응답:', response);
+
+  // 다양한 응답 형식 처리
+  // 1. { success: true, imageUrl: "..." }
+  if (response.success && response.imageUrl) {
+    return response.imageUrl;
+  }
+
+  // 2. { imageUrl: "..." }
+  if (response.imageUrl) {
+    return response.imageUrl;
+  }
+
+  // 3. { success: true, data: { imageUrl: "..." } }
+  if (response.success && response.data?.imageUrl) {
+    return response.data.imageUrl;
+  }
+
+  // 4. { data: { imageUrl: "..." } }
+  if (response.data?.imageUrl) {
+    return response.data.imageUrl;
+  }
+
+  throw new Error(response.message || '이미지 업로드에 실패했습니다.');
 }

@@ -8,6 +8,7 @@ import { getMe } from "../services/authService";
 import { getUserTags } from "../services/tagService";
 import { getRunningStats, type RunningStats } from "../services/recordService";
 import { getUserAchievements, type UserAchievement } from "../services/achievementService";
+import { getSentLikes, type Like } from "../services/likeService";
 import type { User } from "../types";
 
 interface ProfilePageProps {
@@ -17,12 +18,13 @@ interface ProfilePageProps {
 
 export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: ProfilePageProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [likedProfiles, setLikedProfiles] = useState<any[]>([]);
+  const [likedProfiles, setLikedProfiles] = useState<Like[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<RunningStats | null>(null);
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
   const [achievementsLoading, setAchievementsLoading] = useState(false);
+  const [likedProfilesLoading, setLikedProfilesLoading] = useState(false);
 
   // 사용자 정보 로드
   useEffect(() => {
@@ -96,19 +98,47 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
     return colors[index % colors.length];
   };
 
-  // localStorage에서 좋아요한 프로필 불러오기 & 업적 불러오기
-  useEffect(() => {
-    const savedData = localStorage.getItem('runmate_liked_profiles_data');
-    if (savedData) {
-      try {
-        const profiles = JSON.parse(savedData);
-        setLikedProfiles(profiles);
-      } catch (error) {
-        console.error('Error loading liked profiles:', error);
-      }
+  // API에서 보낸 좋아요 불러오기
+  const loadLikedProfiles = async () => {
+    try {
+      setLikedProfilesLoading(true);
+      const sentLikes = await getSentLikes();
+      setLikedProfiles(sentLikes);
+      console.log('ProfilePage - 보낸 좋아요 로드:', sentLikes.length, '명');
+    } catch (error) {
+      console.error('Error loading liked profiles:', error);
+      setLikedProfiles([]);
+    } finally {
+      setLikedProfilesLoading(false);
     }
+  };
 
-    // 업적 데이터 불러오기
+  // 초기 로드 및 페이지 포커스 시 재로드
+  useEffect(() => {
+    loadLikedProfiles();
+
+    // 페이지가 포커스를 받을 때마다 localStorage 재로드
+    const handleFocus = () => {
+      console.log('ProfilePage 포커스 - localStorage 재로드');
+      loadLikedProfiles();
+    };
+
+    // 좋아요 변경 이벤트 리스너 (좋아요 취소 시)
+    const handleLikedProfilesChanged = () => {
+      console.log('ProfilePage - 좋아요 변경 감지, localStorage 재로드');
+      loadLikedProfiles();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('likedProfilesChanged', handleLikedProfilesChanged);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('likedProfilesChanged', handleLikedProfilesChanged);
+    };
+  }, []);
+
+  // 업적 데이터 불러오기
+  useEffect(() => {
     const loadAchievements = async () => {
       if (!user?.user_id) return;
 
@@ -383,41 +413,56 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
             </div>
 
             {/* Liked Mates */}
-            {likedProfiles.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Heart size={20} />
-                    <h3 className="text-xl">관심있는 메이트</h3>
-                  </div>
-                  {onNavigateToLikedMates && (
-                    <Button
-                      onClick={onNavigateToLikedMates}
-                      variant="ghost"
-                      size="sm"
-                      className="text-gray-600 hover:text-black"
-                    >
-                      전체보기
-                    </Button>
-                  )}
+            <div className="bg-white rounded-2xl border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Heart size={20} />
+                  <h3 className="text-xl">관심있는 메이트</h3>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {likedProfiles.slice(0, 4).map((profile) => (
-                    <div key={profile.id} className="text-center group cursor-pointer">
-                      <div className="w-full aspect-square rounded-xl overflow-hidden mb-2 border-2 border-gray-100 group-hover:border-gray-300 transition-colors">
-                        <ImageWithFallback
-                          src={profile.image}
-                          alt={profile.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="text-sm">{profile.name}</div>
-                      <div className="text-xs text-gray-500">{profile.age}세</div>
-                    </div>
-                  ))}
-                </div>
+                {onNavigateToLikedMates && likedProfiles.length > 0 && (
+                  <Button
+                    onClick={onNavigateToLikedMates}
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-600 hover:text-black"
+                  >
+                    전체보기
+                  </Button>
+                )}
               </div>
-            )}
+              {likedProfilesLoading ? (
+                <div className="flex justify-center items-center py-12">
+                  <Loader2 className="animate-spin" size={40} />
+                </div>
+              ) : likedProfiles.length === 0 ? (
+                <div className="text-center py-12">
+                  <Heart size={48} className="mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-600">아직 관심있는 메이트가 없습니다</p>
+                  <p className="text-sm text-gray-500 mt-2">둘러보기에서 관심있는 메이트를 찾아보세요!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {likedProfiles.slice(0, 4).map((like) => {
+                    const profile = like.receiver;
+                    if (!profile) return null;
+
+                    return (
+                      <div key={like.like_id} className="text-center group cursor-pointer">
+                        <div className="w-full aspect-square rounded-xl overflow-hidden mb-2 border-2 border-gray-100 group-hover:border-gray-300 transition-colors">
+                          <ImageWithFallback
+                            src={profile.profile_image || ''}
+                            alt={profile.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="text-sm">{profile.name}</div>
+                        <div className="text-xs text-gray-500">{profile.age}세</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
