@@ -46,6 +46,9 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
   const currentUser = JSON.parse(localStorage.getItem('runmate_user') || 'null');
   const currentUserId = currentUser?.user_id || 1;
 
+  // 상대방 user_id를 저장하는 ref (의존성 문제 해결)
+  const otherUserIdRef = useRef<number | null>(null);
+
   // WebSocket 메시지 수신 핸들러
   const handleWebSocketMessage = useCallback((wsMessage: WebSocketMessage) => {
     console.log('WebSocket 메시지 수신:', wsMessage);
@@ -75,16 +78,15 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
     // 사용자 온라인 상태 변경 처리
     if (wsMessage.type === 'user_status' && wsMessage.data) {
       const { user_id, is_online } = wsMessage.data;
-      // chatRoomData가 로드된 후에만 처리
-      if (chatRoomData) {
-        const otherUser = chatRoomData.chat_room.chat_room_users[0]?.user;
-        if (otherUser && otherUser.user_id === user_id) {
-          console.log(`상대방 온라인 상태 변경: ${is_online ? '온라인' : '오프라인'}`);
-          setOtherUserOnline(is_online);
-        }
+      console.log(`사용자 ${user_id} 상태 변경: ${is_online ? '온라인' : '오프라인'}`);
+
+      // otherUserIdRef를 사용하여 상대방인지 확인
+      if (otherUserIdRef.current === user_id) {
+        console.log(`상대방 온라인 상태 변경: ${is_online ? '온라인' : '오프라인'}`);
+        setOtherUserOnline(is_online);
       }
     }
-  }, [chatRoomId, chatRoomData]);
+  }, [chatRoomId]);
 
   // WebSocket 연결
   const { sendMessage: sendWebSocketMessage, joinRoom, leaveRoom, isConnected } = useWebSocket({
@@ -127,6 +129,17 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
       console.log('채팅방 데이터:', roomData);
       setChatRoomData(roomData);
       setMessages(messageHistory);
+
+      // 상대방 user_id를 ref에 저장
+      const otherUser = roomData.chat_room.chat_room_users[0]?.user;
+      if (otherUser) {
+        otherUserIdRef.current = otherUser.user_id;
+        console.log('상대방 user_id 저장:', otherUser.user_id);
+      }
+
+      // TODO: 백엔드에서 초기 온라인 상태를 제공하면 여기서 설정
+      // 현재는 WebSocket 이벤트를 통해서만 상태를 받아옵니다
+      // setOtherUserOnline(otherUser.is_online);
     } catch (err: any) {
       console.error('채팅방 데이터 로드 실패:', err);
       setError(err.message || '채팅방을 불러오는데 실패했습니다.');

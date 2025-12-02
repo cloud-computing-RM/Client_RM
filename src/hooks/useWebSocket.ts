@@ -211,6 +211,24 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         });
       });
 
+      // 채팅방 입장 성공 (초기 온라인 상태 포함)
+      socket.on('joined_room', (data: any) => {
+        console.log('Joined room with initial status:', data);
+
+        // 초기 온라인 상태 정보 전달
+        if (data.other_users_status && Array.isArray(data.other_users_status)) {
+          data.other_users_status.forEach((userStatus: any) => {
+            onMessage?.({
+              type: 'user_status',
+              data: {
+                user_id: userStatus.user_id,
+                is_online: userStatus.is_online
+              }
+            });
+          });
+        }
+      });
+
     } catch (error: any) {
       console.error('Failed to create Socket.IO connection:', error);
       setConnectionError('Socket.IO 연결에 실패했습니다.');
