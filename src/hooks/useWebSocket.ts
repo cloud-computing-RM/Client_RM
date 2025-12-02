@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { tokenStorage } from '../services/apiClient';
 
 export interface WebSocketMessage {
-  type: 'message' | 'read' | 'typing' | 'system' | 'like_received' | 'match' | 'achievement' | 'message_deleted';
+  type: 'message' | 'read' | 'typing' | 'system' | 'like_received' | 'match' | 'achievement' | 'message_deleted' | 'user_status';
   chat_room_id?: number;
   message?: {
     message_id: number;
@@ -198,6 +198,15 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         console.log('Message deleted:', data);
         onMessage?.({
           type: 'message_deleted',
+          data
+        });
+      });
+
+      // 사용자 온라인/오프라인 상태 변경 알림
+      socket.on('user_status_changed', (data: any) => {
+        console.log('User status changed:', data);
+        onMessage?.({
+          type: 'user_status',
           data
         });
       });

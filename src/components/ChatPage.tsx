@@ -15,6 +15,7 @@ export function ChatPage({ onChatRoomClick }: ChatPageProps) {
   const [chatRooms, setChatRooms] = useState<ChatRoomUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set());
 
   // WebSocket 메시지 수신 핸들러
   const handleWebSocketMessage = useCallback((wsMessage: WebSocketMessage) => {
@@ -42,6 +43,22 @@ export function ChatPage({ onChatRoomClick }: ChatPageProps) {
           return room;
         }));
       }
+    }
+
+    // 사용자 온라인 상태 변경 처리
+    if (wsMessage.type === 'user_status' && wsMessage.data) {
+      const { user_id, is_online } = wsMessage.data;
+      console.log(`ChatPage - 사용자 ${user_id} 상태 변경: ${is_online ? '온라인' : '오프라인'}`);
+
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        if (is_online) {
+          newSet.add(user_id);
+        } else {
+          newSet.delete(user_id);
+        }
+        return newSet;
+      });
     }
   }, []);
 
@@ -209,6 +226,9 @@ export function ChatPage({ onChatRoomClick }: ChatPageProps) {
                           {formatTime(room.chat_room.last_message_at)}
                         </span>
                       </div>
+                      <p className={`text-xs mb-1 ${onlineUsers.has(otherUser.user_id) ? 'text-gray-700 font-semibold' : 'text-gray-500'}`}>
+                        {onlineUsers.has(otherUser.user_id) ? '온라인' : '오프라인'}
+                      </p>
                       <p className={`text-sm truncate ${
                         room.unread_count > 0 ? "text-gray-900 font-medium" : "text-gray-500"
                       }`}>

@@ -38,6 +38,7 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [otherUserOnline, setOtherUserOnline] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,7 +71,20 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
         setMessages(prev => prev.filter(m => m.message_id !== message_id));
       }
     }
-  }, [chatRoomId]);
+
+    // 사용자 온라인 상태 변경 처리
+    if (wsMessage.type === 'user_status' && wsMessage.data) {
+      const { user_id, is_online } = wsMessage.data;
+      // chatRoomData가 로드된 후에만 처리
+      if (chatRoomData) {
+        const otherUser = chatRoomData.chat_room.chat_room_users[0]?.user;
+        if (otherUser && otherUser.user_id === user_id) {
+          console.log(`상대방 온라인 상태 변경: ${is_online ? '온라인' : '오프라인'}`);
+          setOtherUserOnline(is_online);
+        }
+      }
+    }
+  }, [chatRoomId, chatRoomData]);
 
   // WebSocket 연결
   const { sendMessage: sendWebSocketMessage, joinRoom, leaveRoom, isConnected } = useWebSocket({
@@ -352,8 +366,8 @@ export function ChatRoomPage({ chatRoomId, onBack }: ChatRoomPageProps) {
 
           <div className="flex-1">
             <h2 className="font-medium">{otherUser.name}</h2>
-            <p className="text-xs text-gray-500">
-              {isConnected ? '온라인' : '연결 중...'}
+            <p className={`text-xs ${otherUserOnline ? 'text-gray-700 font-semibold' : 'text-gray-500'}`}>
+              {otherUserOnline ? '온라인' : '오프라인'}
             </p>
           </div>
         </div>

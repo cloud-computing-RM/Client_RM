@@ -8,7 +8,7 @@ import { getMe } from "../services/authService";
 import { getUserTags } from "../services/tagService";
 import { getRunningStats, type RunningStats } from "../services/recordService";
 import { getUserAchievements, type UserAchievement } from "../services/achievementService";
-import { getSentLikes, type Like } from "../services/likeService";
+import { getSentLikes, getReceivedLikes, getMatches, type Like, type Match } from "../services/likeService";
 import type { User } from "../types";
 
 interface ProfilePageProps {
@@ -19,12 +19,16 @@ interface ProfilePageProps {
 export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: ProfilePageProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [likedProfiles, setLikedProfiles] = useState<Like[]>([]);
+  const [receivedLikes, setReceivedLikes] = useState<Like[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<RunningStats | null>(null);
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
   const [achievementsLoading, setAchievementsLoading] = useState(false);
   const [likedProfilesLoading, setLikedProfilesLoading] = useState(false);
+  const [receivedLikesLoading, setReceivedLikesLoading] = useState(false);
+  const [matchesLoading, setMatchesLoading] = useState(false);
 
   // 사용자 정보 로드
   useEffect(() => {
@@ -113,20 +117,56 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
     }
   };
 
+  // API에서 받은 좋아요 불러오기
+  const loadReceivedLikes = async () => {
+    try {
+      setReceivedLikesLoading(true);
+      const received = await getReceivedLikes();
+      setReceivedLikes(received);
+      console.log('ProfilePage - 받은 좋아요 로드:', received.length, '명');
+    } catch (error) {
+      console.error('Error loading received likes:', error);
+      setReceivedLikes([]);
+    } finally {
+      setReceivedLikesLoading(false);
+    }
+  };
+
+  // API에서 매칭 불러오기
+  const loadMatches = async () => {
+    try {
+      setMatchesLoading(true);
+      const matchData = await getMatches();
+      setMatches(matchData);
+      console.log('ProfilePage - 매칭 로드:', matchData.length, '명');
+    } catch (error) {
+      console.error('Error loading matches:', error);
+      setMatches([]);
+    } finally {
+      setMatchesLoading(false);
+    }
+  };
+
   // 초기 로드 및 페이지 포커스 시 재로드
   useEffect(() => {
     loadLikedProfiles();
+    loadReceivedLikes();
+    loadMatches();
 
     // 페이지가 포커스를 받을 때마다 localStorage 재로드
     const handleFocus = () => {
       console.log('ProfilePage 포커스 - localStorage 재로드');
       loadLikedProfiles();
+      loadReceivedLikes();
+      loadMatches();
     };
 
     // 좋아요 변경 이벤트 리스너 (좋아요 취소 시)
     const handleLikedProfilesChanged = () => {
       console.log('ProfilePage - 좋아요 변경 감지, localStorage 재로드');
       loadLikedProfiles();
+      loadReceivedLikes();
+      loadMatches();
     };
 
     window.addEventListener('focus', handleFocus);
@@ -419,7 +459,7 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                   <Heart size={20} />
                   <h3 className="text-xl">관심있는 메이트</h3>
                 </div>
-                {onNavigateToLikedMates && likedProfiles.length > 0 && (
+                {onNavigateToLikedMates && (likedProfiles.length > 0 || receivedLikes.length > 0 || matches.length > 0) && (
                   <Button
                     onClick={onNavigateToLikedMates}
                     variant="ghost"
@@ -430,37 +470,117 @@ export function ProfilePage({ onNavigateToLikedMates, onNavigateToSettings }: Pr
                   </Button>
                 )}
               </div>
-              {likedProfilesLoading ? (
+              {likedProfilesLoading && receivedLikesLoading && matchesLoading ? (
                 <div className="flex justify-center items-center py-12">
                   <Loader2 className="animate-spin" size={40} />
                 </div>
-              ) : likedProfiles.length === 0 ? (
+              ) : likedProfiles.length === 0 && receivedLikes.length === 0 && matches.length === 0 && !likedProfilesLoading && !receivedLikesLoading && !matchesLoading ? (
                 <div className="text-center py-12">
                   <Heart size={48} className="mx-auto text-gray-300 mb-4" />
                   <p className="text-gray-600">아직 관심있는 메이트가 없습니다</p>
                   <p className="text-sm text-gray-500 mt-2">둘러보기에서 관심있는 메이트를 찾아보세요!</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {likedProfiles.slice(0, 4).map((like) => {
-                    const profile = like.receiver;
-                    if (!profile) return null;
+                <>
+                  {/* 보낸 좋아요 섹션 */}
+                  <div className="text-sm text-gray-600 mb-4">보낸 좋아요</div>
+                  {likedProfilesLoading ? (
+                    <div className="flex justify-center items-center py-8">
+                      <Loader2 className="animate-spin" size={32} />
+                    </div>
+                  ) : likedProfiles.length === 0 ? (
+                    <div className="text-center py-8 mb-8">
+                      <p className="text-gray-500 text-sm">아직 보낸 좋아요가 없습니다</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                      {likedProfiles.slice(0, 4).map((like) => {
+                        const profile = like.receiver;
+                        if (!profile) return null;
 
-                    return (
-                      <div key={like.like_id} className="text-center group cursor-pointer">
-                        <div className="w-full aspect-square rounded-xl overflow-hidden mb-2 border-2 border-gray-100 group-hover:border-gray-300 transition-colors">
-                          <ImageWithFallback
-                            src={profile.profile_image || ''}
-                            alt={profile.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="text-sm">{profile.name}</div>
-                        <div className="text-xs text-gray-500">{profile.age}세</div>
-                      </div>
-                    );
-                  })}
-                </div>
+                        return (
+                          <div key={like.like_id} className="text-center group cursor-pointer">
+                            <div className="w-full aspect-square rounded-xl overflow-hidden mb-2 border-2 border-gray-100 group-hover:border-gray-300 transition-colors">
+                              <ImageWithFallback
+                                src={profile.profile_image || ''}
+                                alt={profile.name}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div className="text-sm">{profile.name}</div>
+                            <div className="text-xs text-gray-500">{profile.age}세</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 받은 좋아요 섹션 */}
+                  <div className="text-sm text-gray-600 mb-4">받은 좋아요</div>
+                  {receivedLikesLoading ? (
+                    <div className="flex justify-center items-center py-8">
+                      <Loader2 className="animate-spin" size={32} />
+                    </div>
+                  ) : receivedLikes.length === 0 ? (
+                    <div className="text-center py-8 mb-8">
+                      <p className="text-gray-500 text-sm">아직 받은 좋아요가 없습니다</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                      {receivedLikes.slice(0, 4).map((like) => {
+                        const profile = like.sender;
+                        if (!profile) return null;
+
+                        return (
+                          <div key={like.like_id} className="text-center group cursor-pointer">
+                            <div className="w-full aspect-square rounded-xl overflow-hidden mb-2 border-2 border-gray-100 group-hover:border-gray-300 transition-colors">
+                              <ImageWithFallback
+                                src={profile.profile_image || ''}
+                                alt={profile.name}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div className="text-sm">{profile.name}</div>
+                            <div className="text-xs text-gray-500">{profile.age}세</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 매칭 섹션 */}
+                  <div className="text-sm text-gray-600 mb-4">매칭</div>
+                  {matchesLoading ? (
+                    <div className="flex justify-center items-center py-8">
+                      <Loader2 className="animate-spin" size={32} />
+                    </div>
+                  ) : matches.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-gray-500 text-sm">아직 매칭된 메이트가 없습니다</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {matches.slice(0, 4).map((match: any) => {
+                        const profile = match.matched_user;
+                        if (!profile) return null;
+
+                        return (
+                          <div key={match.like_id} className="text-center group cursor-pointer">
+                            <div className="w-full aspect-square rounded-xl overflow-hidden mb-2 border-2 border-gray-100 group-hover:border-gray-300 transition-colors">
+                              <ImageWithFallback
+                                src={profile.profile_image || ''}
+                                alt={profile.name}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div className="text-sm">{profile.name}</div>
+                            <div className="text-xs text-gray-500">{profile.age}세</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
