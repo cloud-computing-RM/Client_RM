@@ -412,6 +412,7 @@ export function ExplorePage() {
                   }}
                 >
                   <ImageWithFallback
+                    key={nearbyUsers[currentIndex + 1].user_id}
                     src={nearbyUsers[currentIndex + 1].profile_image || ''}
                     alt={nearbyUsers[currentIndex + 1].name}
                     className="w-full h-2/3 object-cover rounded-t-3xl"
@@ -441,6 +442,7 @@ export function ExplorePage() {
                   {/* Image */}
                   <div className="relative h-2/3">
                     <ImageWithFallback
+                      key={currentProfile.user_id}
                       src={currentProfile.profile_image || ''}
                       alt={currentProfile.name}
                       className="w-full h-full object-cover"
